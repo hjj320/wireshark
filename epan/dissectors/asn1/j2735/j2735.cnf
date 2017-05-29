@@ -1,0 +1,47 @@
+# j2735.cnf
+# SAE J2735 conformation file
+
+#.OPT
+PER
+UNALIGNED
+#.END
+
+#.PDU
+Frame
+#.END
+
+#.FIELD_RENAME
+#.END
+
+#.OMIT_ASSIGNMENT
+#.END
+
+#.FN_PARS MID
+  VAL_PTR = &mid
+#.END
+
+#.FN_BODY FRAME/FVAL
+  switch (mid) {
+  case 0:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_j2735_SomeMsg);
+    break;
+  default:
+  %(DEFAULT_BODY)s    break;
+  }
+#.END
+
+#.FN_PARS PID
+  VAL_PTR = &pid
+#.END
+
+#.FN_BODY PFRAME/PVAL
+  switch (pid) {
+  case 0:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_j2735_SomeExtensions);
+    break;
+  default:
+  %(DEFAULT_BODY)s    break;
+  }
+#.END
+
+#.END_OF_CNF

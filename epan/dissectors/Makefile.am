@@ -140,6 +140,7 @@ ASN1_DISSECTOR_SRC = \
 	packet-ilp.c		\
 	packet-inap.c		\
 	packet-isdn-sup.c	\
+	packet-j2735.c		\
 	packet-kerberos.c	\
 	packet-lcsap.c		\
 	packet-ldap.c		\
@@ -1596,6 +1597,7 @@ DISSECTOR_INCLUDES = \
 	packet-isl.h		\
 	packet-isup.h		\
 	packet-iwarp-ddp-rdmap.h	\
+	packet-j2735.h		\
 	packet-juniper.h	\
 	packet-jxta.h		\
 	packet-kerberos.h	\

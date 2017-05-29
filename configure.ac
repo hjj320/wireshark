@@ -2721,6 +2721,7 @@ AC_CONFIG_FILES(
   epan/dissectors/asn1/ilp/Makefile
   epan/dissectors/asn1/inap/Makefile
   epan/dissectors/asn1/isdn-sup/Makefile
+  epan/dissectors/asn1/j2735/Makefile
   epan/dissectors/asn1/kerberos/Makefile
   epan/dissectors/asn1/lcsap/Makefile
   epan/dissectors/asn1/ldap/Makefile

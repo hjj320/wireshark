@@ -99,6 +99,7 @@ set(ASN1_DISSECTOR_SRC
 	packet-ilp.c
 	packet-inap.c
 	packet-isdn-sup.c
+	packet-j2735.c
 	packet-kerberos.c
 	packet-lcsap.c
 	packet-ldap.c

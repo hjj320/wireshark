@@ -65,6 +65,7 @@ SUBDIRS =		\
 	ilp		\
 	inap		\
 	isdn-sup	\
+	j2735		\
 	kerberos	\
 	lcsap		\
 	ldap		\

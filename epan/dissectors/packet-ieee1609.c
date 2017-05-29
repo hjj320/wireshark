@@ -97,6 +97,7 @@ static gint ett_ieee1609dot2_signed = -1;
 
 static dissector_handle_t ieee1609dot2_handle = NULL;
 static dissector_handle_t ieee1609dot3_wsa_handle = NULL;
+static dissector_handle_t j2735_handle = NULL;
 
 static int
 dissect_ieee1609dot3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
@@ -330,6 +331,8 @@ dissect_ieee1609dot2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
 
     if ((wsa_version & 0xF0) == 0x30)
         call_dissector(ieee1609dot3_wsa_handle, next_tvb, pinfo, tree);
+    else if (j2735_handle)
+        call_dissector(j2735_handle, next_tvb, pinfo, tree);
     else
         call_data_dissector(next_tvb, pinfo, tree);
 
@@ -504,6 +507,7 @@ proto_reg_handoff_ieee1609dot3(void)
 
     ieee1609dot2_handle = find_dissector_add_dependency("ieee1609dot2", proto_ieee1609dot3);
     ieee1609dot3_wsa_handle = find_dissector_add_dependency("ieee1609dot3wsa", proto_ieee1609dot2);
+    j2735_handle = find_dissector_add_dependency("j2735", proto_ieee1609dot2);
 }
 
 /*
