@@ -2776,6 +2776,7 @@ AC_CONFIG_FILES(
   epan/dissectors/asn1/tetra/Makefile
   epan/dissectors/asn1/ulp/Makefile
   epan/dissectors/asn1/wlancertextn/Makefile
+  epan/dissectors/asn1/wsm/Makefile
   epan/dissectors/asn1/x2ap/Makefile
   epan/dissectors/asn1/x509af/Makefile
   epan/dissectors/asn1/x509ce/Makefile

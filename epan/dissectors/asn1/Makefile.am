@@ -120,6 +120,7 @@ SUBDIRS =		\
 	tetra		\
 	ulp		\
 	wlancertextn	\
+	wsm		\
 	x2ap		\
 	x509af		\
 	x509ce		\

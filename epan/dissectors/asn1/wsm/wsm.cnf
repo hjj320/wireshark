@@ -1,0 +1,65 @@
+# j2735.cnf
+# SAE J2735 conformation file
+
+#.OPT
+PER
+UNALIGNED
+#.END
+
+#.PDU
+ShortMsgNpdu
+#.END
+
+#.FIELD_RENAME
+#.END
+
+#.OMIT_ASSIGNMENT
+VarLengthNumber2
+RepeatRate
+TwoDLocation
+ThreeDLocation
+AdvertiserIdentifier
+ProviderServiceContext
+ServicePort
+ProviderMacAddress
+RcpiThreshold
+WsaCountThreshold
+WsaCountThresholdInterval
+EdcaParameterSet
+ChannelAccess80211
+SecondaryDns
+GatewayMacAddress
+DummyExtension
+IPv6Address
+MACaddress
+EdcaParameterRecord
+Latitude
+Longitude
+Elevation
+#.END
+
+#.FN_PARS RefExt
+  VAL_PTR = &extensionId
+#.END
+
+#.FN_BODY Extension/value
+  switch (extensionId) {
+  case 4:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsm_TXpower80211);
+    break;
+  case 15:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsm_ChannelNumber80211);
+    break;
+  case 16:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsm_DataRate80211);
+    break;
+  default:
+  %(DEFAULT_BODY)s    break;
+  }
+#.END
+
+#.FN_BODY ShortMsgData VAL_PTR = &data_tvb
+%(DEFAULT_BODY)s
+#.END
+
+#.END_OF_CNF
