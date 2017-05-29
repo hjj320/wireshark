@@ -96,6 +96,7 @@ static gint ett_ieee1609dot2_signed = -1;
 /* Dissectors */
 
 static dissector_handle_t ieee1609dot2_handle = NULL;
+static dissector_handle_t ieee1609dot3_wsa_handle = NULL;
 
 static int
 dissect_ieee1609dot3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
@@ -250,6 +251,7 @@ dissect_ieee1609dot2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     guint16 datalen = 0;
     guint8 version;
     guint8 content;
+    guint8 wsa_version;
    
     version = tvb_get_guint8(tvb, 0);
     if (version != 3)
@@ -324,7 +326,12 @@ dissect_ieee1609dot2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     }
 
     next_tvb = tvb_new_subset_length(tvb, offset, datalen);
-    call_data_dissector(next_tvb, pinfo, tree);
+    wsa_version = tvb_get_guint8(tvb, offset);
+
+    if ((wsa_version & 0xF0) == 0x30)
+        call_dissector(ieee1609dot3_wsa_handle, next_tvb, pinfo, tree);
+    else
+        call_data_dissector(next_tvb, pinfo, tree);
 
     return tvb_captured_length(tvb);
 }
@@ -496,6 +503,7 @@ proto_reg_handoff_ieee1609dot3(void)
     dissector_add_uint("ethertype", ETHERTYPE_WSMP, ieee1609dot3_handle);
 
     ieee1609dot2_handle = find_dissector_add_dependency("ieee1609dot2", proto_ieee1609dot3);
+    ieee1609dot3_wsa_handle = find_dissector_add_dependency("ieee1609dot3wsa", proto_ieee1609dot2);
 }
 
 /*
