@@ -195,6 +195,7 @@ ASN1_DISSECTOR_SRC = \
 	packet-tetra.c		\
 	packet-ulp.c		\
 	packet-wlancertextn.c	\
+	packet-wsa.c		\
 	packet-wsm.c		\
 	packet-x2ap.c		\
 	packet-x509af.c		\
@@ -1763,6 +1764,7 @@ DISSECTOR_INCLUDES = \
 	packet-wccp.h		\
 	packet-windows-common.h	\
 	packet-wlancertextn.h	\
+	packet-wsa.h		\
 	packet-wsm.h		\
 	packet-wps.h		\
 	packet-wsp.h		\

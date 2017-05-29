@@ -119,6 +119,7 @@ set(ASN1_SRC_DIRS
 	tetra
 	ulp
 	wlancertextn
+	wsa
 	wsm
 	x2ap
 	x509af

@@ -1,0 +1,77 @@
+# j2735.cnf
+# SAE J2735 conformation file
+
+#.OPT
+PER
+UNALIGNED
+#.END
+
+#.PDU
+SrvAdvMsg
+#.END
+
+#.FIELD_RENAME
+#.END
+
+#.OMIT_ASSIGNMENT
+VarLengthNumber2
+DataRate80211
+#.END
+
+#.FN_PARS RefExt
+  VAL_PTR = &extensionId
+#.END
+
+#.FN_BODY Extension/value
+  switch (extensionId) {
+  case 5:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_TwoDLocation);
+    break;
+  case 6:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_ThreeDLocation);
+    break;
+  case 7:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_AdvertiserIdentifier);
+    break;
+  case 8:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_ProviderServiceContext);
+    break;
+  case 9:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_IPv6Address);
+    break;
+  case 10:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_ServicePort);
+    break;
+  case 11:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_ProviderMacAddress);
+    break;
+  case 12:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_EdcaParameterSet);
+    break;
+  case 13:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_SecondaryDns);
+    break;
+  case 14:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_GatewayMacAddress);
+    break;
+  case 17:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_RepeatRate);
+    break;
+  case 19:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_RcpiThreshold);
+    break;
+  case 20:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_WsaCountThreshold);
+    break;
+  case 21:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_ChannelAccess80211);
+    break;
+  case 22:
+    offset = dissect_per_open_type(tvb, offset, actx, tree, hf_index, dissect_wsa_WsaCountThresholdInterval);
+    break;
+  default:
+  %(DEFAULT_BODY)s    break;
+  }
+#.END
+
+#.END_OF_CNF
