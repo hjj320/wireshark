@@ -710,6 +710,7 @@ set(DISSECTOR_SRC
 	packet-idp.c
 	packet-idrp.c
 	packet-iec104.c
+	packet-ieee1609.c
 	packet-ieee1722.c
 	packet-ieee17221.c
 	packet-ieee80211-netmon.c
