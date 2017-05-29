@@ -394,6 +394,7 @@ dissect_llc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 	proto_item	*ti, *sap_item;
 	int		is_snap;
 	guint16		control;
+	guint16		etype;
 	int		llc_header_len;
 	guint8		dsap, ssap, format;
 	tvbuff_t	*next_tvb;
@@ -402,21 +403,34 @@ dissect_llc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 	col_clear(pinfo->cinfo, COL_INFO);
 
 	dsap = tvb_get_guint8(tvb, 0);
+	ssap = tvb_get_guint8(tvb, 1);
+	is_snap = (dsap == SAP_SNAP) && (ssap == SAP_SNAP);
 
 	ti = proto_tree_add_item(tree, proto_llc, tvb, 0, -1, ENC_NA);
 	llc_tree = proto_item_add_subtree(ti, ett_llc);
+
+	/* tweak for IEEE Std. 802, EPD(EtherType Protocol Discrimination) */
+	if (!is_snap) {
+		etype = tvb_get_ntohs(tvb, 0);
+		next_tvb = tvb_new_subset_remaining(tvb, 2);
+		if (dissector_try_uint(ethertype_subdissector_table,
+					etype, next_tvb, pinfo, tree)) {
+			proto_tree_add_uint(llc_tree,
+					hf_llc_type, tvb, 0, 2, etype);
+			return tvb_captured_length(tvb);
+		}
+	}
+
 	sap_item = proto_tree_add_item(llc_tree, hf_llc_dsap, tvb, 0, 1, ENC_BIG_ENDIAN);
 	field_tree = proto_item_add_subtree(sap_item, ett_llc_dsap);
 	proto_tree_add_item(field_tree, hf_llc_dsap_sap, tvb, 0, 1, ENC_BIG_ENDIAN);
 	proto_tree_add_item(field_tree, hf_llc_dsap_ig, tvb, 0, 1, ENC_NA);
 
-	ssap = tvb_get_guint8(tvb, 1);
 	sap_item = proto_tree_add_item(llc_tree, hf_llc_ssap, tvb, 1, 1, ENC_BIG_ENDIAN);
 	field_tree = proto_item_add_subtree(sap_item, ett_llc_ssap);
 	proto_tree_add_item(field_tree, hf_llc_ssap_sap, tvb, 1, 1, ENC_BIG_ENDIAN);
 	proto_tree_add_item(field_tree, hf_llc_ssap_cr, tvb, 1, 1, ENC_NA);
 
-	is_snap = (dsap == SAP_SNAP) && (ssap == SAP_SNAP);
 	llc_header_len = 2;	/* DSAP + SSAP */
 
 	/*
