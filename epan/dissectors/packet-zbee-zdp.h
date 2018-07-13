@@ -7,19 +7,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #ifndef PACKET_ZBEE_ZDP_H
@@ -74,6 +62,7 @@
 #define ZBEE_ZDP_REQ_MGMT_NWKUPDATE               0x0038  /* ZigBee 2007 & later. */
 #define ZBEE_ZDP_REQ_MGMT_NWKUPDATE_ENH           0x0039  /* R22 */
 #define ZBEE_ZDP_REQ_MGMT_IEEE_JOIN_LIST          0x003a  /* R22 */
+#define ZBEE_ZDP_REQ_MGMT_UNSOLICITED_NWKUPDATE   0x003b  /* R22 */
 
 #define ZBEE_ZDP_RSP_NWK_ADDR                     0x8000
 #define ZBEE_ZDP_RSP_IEEE_ADDR                    0x8001
@@ -117,7 +106,7 @@
 #define ZBEE_ZDP_RSP_MGMT_PERMIT_JOIN             0x8036  /* ZigBee 2006 & later. */
 #define ZBEE_ZDP_RSP_MGMT_CACHE                   0x8037  /* ZigBee 2006 & later. */
 #define ZBEE_ZDP_RSP_MGMT_NWKUPDATE               0x8038  /* ZigBee 2007 & later. */
-/* ZBEE_ZDP_REQ_MGMT_NWKUPDATE_ENH returns ZBEE_ZDP_RSP_MGMT_NWKUPDATE so cluster 0x8039 is unused */
+#define ZBEE_ZDP_RSP_MGMT_NWKUPDATE_ENH           0x8039  /* R22 */
 #define ZBEE_ZDP_RSP_MGMT_IEEE_JOIN_LIST          0x803a  /* R22 */
 
 #define ZBEE_ZDP_MSG_RESPONSE_BIT                 0x8000
@@ -209,7 +198,7 @@
  */
 /* General indicies. */
 extern int hf_zbee_zdp_ext_addr;
-extern int hf_zbee_zdp_device;
+extern int hf_zbee_zdp_nwk_addr;
 extern int hf_zbee_zdp_req_type;
 extern int hf_zbee_zdp_index;
 extern int hf_zbee_zdp_ep_count;
@@ -262,6 +251,8 @@ extern int hf_zbee_zdp_update_id;
 extern int hf_zbee_zdp_manager;
 extern int hf_zbee_zdp_tx_total;
 extern int hf_zbee_zdp_tx_fail;
+extern int hf_zbee_zdp_tx_retries;
+extern int hf_zbee_zdp_period_time_results;
 extern int hf_zbee_zdp_channel_count;
 extern int hf_zbee_zdp_channel_mask;
 extern int hf_zbee_zdp_channel_page;
@@ -332,7 +323,6 @@ extern gint ett_zbee_zdp_table_entry;
  */
 extern const gchar  *zdp_status_name       (guint8 status);
 extern void     zdp_dump_excess            (tvbuff_t *tvb, guint offset, packet_info *pinfo, proto_tree *tree);
-extern guint    zbee_parse_uint            (proto_tree *tree, int hfindex, tvbuff_t *tvb, guint *offset, guint length, proto_item **ti);
 extern guint64  zbee_parse_eui64           (proto_tree *tree, int hfindex, tvbuff_t *tvb, guint *offset, guint length, proto_item **ti);
 extern void     zbee_append_info           (proto_item *item, packet_info *pinfo, const gchar *format, ...) G_GNUC_PRINTF(3, 4);
 
@@ -396,6 +386,7 @@ extern void dissect_zbee_zdp_req_mgmt_cache             (tvbuff_t *tvb, packet_i
 extern void dissect_zbee_zdp_req_mgmt_nwkupdate         (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 extern void dissect_zbee_zdp_req_mgmt_nwkupdate_enh     (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 extern void dissect_zbee_zdp_req_mgmt_ieee_join_list    (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
+extern void dissect_zbee_zdp_req_mgmt_unsolicited_nwkupdate    (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 
 extern void dissect_zbee_zdp_rsp_nwk_addr               (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 extern void dissect_zbee_zdp_rsp_ext_addr               (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);

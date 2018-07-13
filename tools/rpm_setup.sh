@@ -5,23 +5,28 @@
 # By Gerald Combs <gerald@wireshark.org>
 # Copyright 1998 Gerald Combs
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+# SPDX-License-Identifier: GPL-2.0-or-later
 #
 # We drag in tools that might not be needed by all users; it's easier
 # that way.
 #
+
+if [ "$1" = "--help" ]
+then
+	echo "\nUtility to setup a rpm-based system for Wireshark Development.\n"
+	echo "The basic usage installs the needed software\n\n"
+	echo "Usage: $0 [--install-optional] [...other options...]\n"
+	echo "\t--install-optional: install optional software as well"
+	echo "\t[other]: other options are passed as-is to the packet manager\n"
+	exit 1
+fi
+
+# Check if the user is root
+if [ $(id -u) -ne 0 ]
+then
+	echo "You must be root."
+	exit 1
+fi
 
 for op
 do
@@ -33,13 +38,40 @@ do
 	fi
 done
 
-BASIC_LIST="autoconf automake libtool gcc flex bison python perl lua-devel lua \
-desktop-file-utils fop asciidoc git git-review gtk2-devel gtk3-devel glib2-devel \
-libpcap-devel zlib-devel"
+BASIC_LIST="cmake \
+	gcc \
+	flex \
+	bison \
+	python \
+	perl \
+	lua-devel \
+	lua \
+	desktop-file-utils \
+	fop \
+	asciidoc \
+	git \
+	git-review \
+	glib2-devel \
+	libpcap-devel \
+	zlib-devel"
 
-ADDITIONAL_LIST="libnl3-devel libnghttp2-devel libcap libcap-devel lynx \
-libgcrypt-devel libssh-devel krb5-devel perl-Parse-Yapp sbc-devel libsmi-devel \
-snappy-devel lz4"
+ADDITIONAL_LIST="libnl3-devel \
+	libnghttp2-devel \
+	libcap \
+	libcap-devel \
+	libgcrypt-devel \
+	libssh-devel \
+	krb5-devel \
+	perl-Parse-Yapp \
+	sbc-devel \
+	libsmi-devel \
+	snappy-devel \
+	lz4 \
+	json-glib-devel \
+	ninja-build \
+	doxygen \
+	libxml2-devel \
+	spandsp-devel"
 
 # Guess which package manager we will use
 PM=`which zypper 2> /dev/null ||
@@ -121,8 +153,8 @@ echo "lz4 devel is unavailable" >&2
 
 add_package ADDITIONAL_LIST libcap-progs || echo "cap progs are unavailable" >&2
 
-add_package ADDITIONAL_LIST GeoIP-devel || add_package ADDITIONAL_LIST libGeoIP-devel ||
-echo "GeoIP devel is unavailable" >&2
+add_package ADDITIONAL_LIST libmaxminddb-devel ||
+echo "MaxMind DB devel is unavailable" >&2
 
 add_package ADDITIONAL_LIST gnutls-devel || add_package ADDITIONAL_LIST libgnutls-devel ||
 echo "gnutls devel is unavailable" >&2
@@ -133,12 +165,19 @@ echo "Gettext devel is unavailable" >&2
 add_package ADDITIONAL_LIST perl-Pod-Html ||
 echo "perl-Pod-Html is unavailable" >&2
 
-$PM install $BASIC_LIST
+add_package ADDITIONAL_LIST asciidoctor || add_package ADDITIONAL_LIST rubygem-asciidoctor.noarch ||
+echo "asciidoctor is unavailable" >&2
+
+# Now arrange for optional support libraries
+if [ $ADDITIONAL ]
+then
+	ACTUAL_LIST="$ACTUAL_LIST $ADDITIONAL_LIST"
+fi
+
+$PM install $ACTUAL_LIST $OPTIONS
 
 # Now arrange for optional support libraries
 if [ ! $ADDITIONAL ]
 then
 	echo -e "\n*** Optional packages not installed. Rerun with --install-optional to have them.\n"
-else
-	$PM install $ADDITIONAL_LIST $OPTIONS
 fi

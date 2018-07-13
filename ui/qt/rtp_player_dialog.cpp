@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "rtp_player_dialog.h"
@@ -26,13 +14,14 @@
 
 #include <epan/dissectors/packet-rtp.h>
 
+#include <wsutil/report_message.h>
 #include <wsutil/utf8_entities.h>
 
-#include "color_utils.h"
-#include "qcustomplot.h"
-#include "qt_ui_utils.h"
+#include <ui/qt/utils/color_utils.h>
+#include <ui/qt/widgets/qcustomplot.h>
+#include <ui/qt/utils/qt_ui_utils.h>
 #include "rtp_audio_stream.h"
-#include "tango_colors.h"
+#include <ui/qt/utils/tango_colors.h>
 
 #include <QAudio>
 #include <QAudioDeviceInfo>
@@ -44,7 +33,7 @@
 
 #include <QPushButton>
 
-#include "stock_icon.h"
+#include <ui/qt/utils/stock_icon.h>
 #include "wireshark_application.h"
 
 // To do:
@@ -148,19 +137,19 @@ RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf) :
     ui->playButton->setIcon(StockIcon("media-playback-start"));
     ui->stopButton->setIcon(StockIcon("media-playback-stop"));
 
-    QString default_out_name = QAudioDeviceInfo::defaultOutputDevice().deviceName();
+    // Ordered, unique device names starting with the system default
+    QMap<QString, bool> out_device_map; // true == default device
+    out_device_map.insert(QAudioDeviceInfo::defaultOutputDevice().deviceName(), true);
     foreach (QAudioDeviceInfo out_device, QAudioDeviceInfo::availableDevices(QAudio::AudioOutput)) {
-        QString out_name = out_device.deviceName();
+        if (!out_device_map.contains(out_device.deviceName())) {
+            out_device_map.insert(out_device.deviceName(), false);
+        }
+    }
+
+    foreach (QString out_name, out_device_map.keys()) {
         ui->outputDeviceComboBox->addItem(out_name);
-        if (out_name == default_out_name) {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
-            ui->outputDeviceComboBox->setCurrentText(out_name);
-#else
-            int new_index = ui->outputDeviceComboBox->findText(default_out_name);
-            if (new_index >= 0) {
-                ui->outputDeviceComboBox->setCurrentIndex(new_index);
-            }
-#endif
+        if (out_device_map.value(out_name)) {
+            ui->outputDeviceComboBox->setCurrentIndex(ui->outputDeviceComboBox->count() - 1);
         }
     }
     if (ui->outputDeviceComboBox->count() < 1) {
@@ -217,7 +206,14 @@ void RtpPlayerDialog::reject()
 
 void RtpPlayerDialog::retapPackets()
 {
-    register_tap_listener("rtp", this, NULL, 0, NULL, tapPacket, NULL);
+    GString *error_string;
+
+    error_string = register_tap_listener("rtp", this, NULL, 0, NULL, tapPacket, NULL);
+    if (error_string) {
+        report_failure("RTP Player - tap registration failed: %s", error_string->str);
+        g_string_free(error_string, TRUE);
+        return;
+    }
     cap_file_.retapPackets();
     remove_tap_listener(this);
 
@@ -740,6 +736,11 @@ int RtpPlayerDialog::getHoveredPacket()
 QString RtpPlayerDialog::currentOutputDeviceName()
 {
     return ui->outputDeviceComboBox->currentText();
+}
+
+void RtpPlayerDialog::on_outputDeviceComboBox_currentIndexChanged(const QString &)
+{
+    rescanPackets();
 }
 
 void RtpPlayerDialog::on_jitterSpinBox_valueChanged(double)

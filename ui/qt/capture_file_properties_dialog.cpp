@@ -6,31 +6,19 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "capture_file_properties_dialog.h"
 #include <ui_capture_file_properties_dialog.h>
 
-#include "summary.h"
+#include "ui/summary.h"
 
 #include "wsutil/str_util.h"
 #include "wsutil/utf8_entities.h"
-#include "ws_version_info.h"
+#include "version_info.h"
 
-#include "qt_ui_utils.h"
+#include <ui/qt/utils/qt_ui_utils.h>
 #include "wireshark_application.h"
 
 #include <QPushButton>
@@ -49,6 +37,10 @@ CaptureFilePropertiesDialog::CaptureFilePropertiesDialog(QWidget &parent, Captur
     loadGeometry(parent.width() * 2 / 3, parent.height());
 
     ui->detailsTextEdit->setAcceptRichText(true);
+
+    // make the details box larger than the comments
+    ui->splitter->setStretchFactor(0, 6);
+    ui->splitter->setStretchFactor(1, 1);
 
     QPushButton *button = ui->buttonBox->button(QDialogButtonBox::Reset);
     if (button) {
@@ -107,7 +99,7 @@ void CaptureFilePropertiesDialog::updateWidgets()
     ui->commentsTextEdit->setEnabled(enable);
 
     fillDetails();
-    ui->commentsTextEdit->setText(cf_read_shb_comment(cap_file_.capFile()));
+    ui->commentsTextEdit->setText(cf_read_section_comment(cap_file_.capFile()));
 
     WiresharkDialog::updateWidgets();
 }
@@ -192,7 +184,7 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
         << table_data_tmpl.arg(encaps_str)
         << table_row_end;
 
-    if (summary.has_snap) {
+    if (summary.snap != 0) {
         out << table_row_begin
             << table_vheader_tmpl.arg(tr("Snapshot length"))
             << table_data_tmpl.arg(summary.snap)
@@ -248,7 +240,7 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
     out << section_tmpl_.arg(tr("Capture"));
     out << table_begin;
 
-    wtap_block_t shb_inf = wtap_file_get_shb(cap_file_.capFile()->wth);
+    wtap_block_t shb_inf = wtap_file_get_shb(cap_file_.capFile()->provider.wth);
     char *str;
 
     if (shb_inf != NULL) {
@@ -417,16 +409,16 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
         << table_data_tmpl.arg(marked_str)
         << table_row_end;
 
-    // Average packets per second
+    // Average packet size
     captured_str = displayed_str = marked_str = n_a;
     if (summary.packet_count > 0) {
-            captured_str = QString("%1").arg(summary.bytes/summary.packet_count + 0.5, 1, 'f', 1);
+            captured_str = QString::number((guint64) ((double)summary.bytes/summary.packet_count + 0.5));
     }
     if (summary.filtered_count > 0) {
-            displayed_str = QString("%1").arg(summary.filtered_bytes/summary.filtered_count + 0.5, 1, 'f', 1);
+            displayed_str = QString::number((guint64) ((double)summary.filtered_bytes/summary.filtered_count + 0.5));
     }
     if (summary.marked_count > 0) {
-            marked_str = QString("%1").arg(summary.marked_bytes/summary.marked_count + 0.5, 1, 'f', 1);
+            marked_str = QString::number((guint64) ((double)summary.marked_bytes/summary.marked_count + 0.5));
     }
     out << table_row_begin
         << table_data_tmpl.arg(tr("Average packet size, B"))
@@ -512,11 +504,11 @@ void CaptureFilePropertiesDialog::fillDetails()
     cursor.insertHtml(summary);
     cursor.insertBlock(); // Work around rendering oddity.
 
-    QString file_comments = cf_read_shb_comment(cap_file_.capFile());
+    QString file_comments = cf_read_section_comment(cap_file_.capFile());
     if (!file_comments.isEmpty()) {
         QString file_comments_html;
 
-        QString comment_escaped = html_escape(file_comments);
+        QString comment_escaped = html_escape(file_comments).replace('\n', "<br>");
         file_comments_html = section_tmpl_.arg(tr("File Comment"));
         file_comments_html += para_tmpl_.arg(comment_escaped);
 
@@ -529,14 +521,14 @@ void CaptureFilePropertiesDialog::fillDetails()
         cursor.insertHtml(section_tmpl_.arg(tr("Packet Comments")));
 
         for (guint32 framenum = 1; framenum <= cap_file_.capFile()->count ; framenum++) {
-            frame_data *fdata = frame_data_sequence_find(cap_file_.capFile()->frames, framenum);
-            char *pkt_comment = cf_get_comment(cap_file_.capFile(), fdata);
+            frame_data *fdata = frame_data_sequence_find(cap_file_.capFile()->provider.frames, framenum);
+            char *pkt_comment = cf_get_packet_comment(cap_file_.capFile(), fdata);
 
             if (pkt_comment) {
                 QString frame_comment_html = tr("<p>Frame %1: ").arg(framenum);
                 QString raw_comment = pkt_comment;
 
-                frame_comment_html += html_escape(raw_comment);
+                frame_comment_html += html_escape(raw_comment).replace('\n', "<br>");
                 frame_comment_html += "</p>\n";
                 cursor.insertBlock();
                 cursor.insertHtml(frame_comment_html);
@@ -577,7 +569,7 @@ void CaptureFilePropertiesDialog::on_buttonBox_accepted()
     if (wtap_dump_can_write(cap_file_.capFile()->linktypes, WTAP_COMMENT_PER_SECTION))
     {
         gchar *str = qstring_strdup(ui->commentsTextEdit->toPlainText());
-        cf_update_capture_comment(cap_file_.capFile(), str);
+        cf_update_section_comment(cap_file_.capFile(), str);
         emit captureCommentChanged();
         fillDetails();
     }

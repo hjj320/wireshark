@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "service_response_time_dialog.h"
@@ -28,6 +16,7 @@
 #include <ui/service_response_time.h>
 
 #include "rpc_service_response_time_dialog.h"
+#include "scsi_service_response_time_dialog.h"
 #include "wireshark_application.h"
 
 #include <QTreeWidget>
@@ -65,6 +54,8 @@ gboolean register_service_response_tables(const void *, void *value, void*)
     } else if (strcmp(short_name, "RPC") == 0) {
         short_name = "ONC-RPC";
         tpd_creator = RpcServiceResponseTimeDialog::createOncRpcSrtDialog;
+    } else if (strcmp(short_name, "SCSI") == 0) {
+        tpd_creator = ScsiServiceResponseTimeDialog::createScsiSrtDialog;
     }
 
     cfg_str_to_srt_[cfg_abbr] = srt;
@@ -184,6 +175,9 @@ ServiceResponseTimeDialog::ServiceResponseTimeDialog(QWidget &parent, CaptureFil
     setWindowSubtitle(subtitle);
     loadGeometry(0, 0, "ServiceResponseTimeDialog");
 
+    srt_data_.srt_array = NULL;
+    srt_data_.user_data = NULL;
+
     // Add number of columns for this stats_tree
     QStringList header_labels;
     for (int col = 0; col < NUM_SRT_COLUMNS; col++) {
@@ -205,6 +199,14 @@ ServiceResponseTimeDialog::ServiceResponseTimeDialog(QWidget &parent, CaptureFil
 
     connect(statsTreeWidget(), SIGNAL(itemChanged(QTreeWidgetItem*,int)),
             this, SLOT(statsTreeWidgetItemChanged()));
+}
+
+ServiceResponseTimeDialog::~ServiceResponseTimeDialog()
+{
+    if (srt_data_.srt_array) {
+        free_srt_table(srt_, srt_data_.srt_array, NULL, NULL);
+        g_array_free(srt_data_.srt_array, TRUE);
+    }
 }
 
 TapParameterDialog *ServiceResponseTimeDialog::createSrtDialog(QWidget &parent, const QString cfg_str, const QString filter, CaptureFile &cf)
@@ -233,10 +235,6 @@ void ServiceResponseTimeDialog::tapReset(void *srtd_ptr)
     reset_srt_table(srtd->srt_array, NULL, NULL);
 
     srt_dlg->statsTreeWidget()->clear();
-    for (guint i = 0; i < srtd->srt_array->len; i++) {
-        srt_stat_table *srt_table = g_array_index(srtd->srt_array, srt_stat_table*, i);
-        srt_dlg->addSrtTable(srt_table);
-    }
 }
 
 void ServiceResponseTimeDialog::tapDraw(void *srtd_ptr)
@@ -259,17 +257,31 @@ void ServiceResponseTimeDialog::tapDraw(void *srtd_ptr)
     }
 }
 
+void ServiceResponseTimeDialog::endRetapPackets()
+{
+    for (guint i = 0; i < srt_data_.srt_array->len; i++) {
+        srt_stat_table *srt_table = g_array_index(srt_data_.srt_array, srt_stat_table*, i);
+        addSrtTable(srt_table);
+    }
+    WiresharkDialog::endRetapPackets();
+}
+
 void ServiceResponseTimeDialog::fillTree()
 {
-    srt_data_t srt_data;
-    srt_data.srt_array = g_array_new(FALSE, TRUE, sizeof(srt_stat_table*));
-    srt_data.user_data = this;
+    if (srt_data_.srt_array) {
+        free_srt_table(srt_, srt_data_.srt_array, NULL, NULL);
+        g_array_free(srt_data_.srt_array, TRUE);
+    }
+    srt_data_.srt_array = g_array_new(FALSE, TRUE, sizeof(srt_stat_table*));
+    srt_data_.user_data = this;
 
-    srt_table_dissector_init(srt_, srt_data.srt_array, NULL, NULL);
+    provideParameterData();
+
+    srt_table_dissector_init(srt_, srt_data_.srt_array, NULL, NULL);
 
     QString display_filter = displayFilter();
     if (!registerTapListener(get_srt_tap_listener_name(srt_),
-                        &srt_data,
+                        &srt_data_,
                         display_filter.toUtf8().constData(),
                         0,
                         tapReset,
@@ -288,14 +300,12 @@ void ServiceResponseTimeDialog::fillTree()
         statsTreeWidget()->setRootIndex(statsTreeWidget()->model()->index(0, 0));
     }
 
-    tapDraw(&srt_data);
+    tapDraw(&srt_data_);
 
     statsTreeWidget()->sortItems(SRT_COLUMN_PROCEDURE, Qt::AscendingOrder);
     statsTreeWidget()->setSortingEnabled(true);
 
     removeTapListeners();
-
-    g_array_free(srt_data.srt_array, TRUE);
 }
 
 QList<QVariant> ServiceResponseTimeDialog::treeItemData(QTreeWidgetItem *ti) const

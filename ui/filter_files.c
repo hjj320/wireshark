@@ -5,19 +5,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include <config.h>
@@ -30,7 +18,6 @@
 
 #include <wsutil/file_util.h>
 #include <wsutil/filesystem.h>
-#include <wsutil/glib-compat.h>
 #include <wsutil/report_message.h>
 
 #include "ui/filter_files.h"
@@ -86,7 +73,7 @@ add_filter_entry(GList *fl, const char *filt_name, const char *filt_expr)
     filt         = (filter_def *) g_malloc(sizeof(filter_def));
     filt->name   = g_strdup(filt_name);
     filt->strval = g_strdup(filt_expr);
-    return g_list_append(fl, filt);
+    return g_list_prepend(fl, filt);
 }
 
 static void
@@ -233,7 +220,8 @@ read_filter_list(filter_list_type_t list_type)
       }
 
       /*
-       * Try to open the global "cfilters/dfilters" file */
+       * Try to open the global "cfilters/dfilters" file.
+       */
       g_free(ff_path);
       ff_path = get_datafile_path(ff_name);
       if ((ff = ws_fopen(ff_path, "r")) == NULL) {

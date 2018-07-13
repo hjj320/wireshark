@@ -4,24 +4,10 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
-
-#ifdef HAVE_LIBPCAP
 
 #include <ui_compiled_filter_output.h>
 #include "compiled_filter_output.h"
@@ -56,13 +42,11 @@ CompiledFilterOutput::CompiledFilterOutput(QWidget *parent, QStringList &intList
     close_bt->setDefault(true);
 
     interface_list_ = ui->interfaceList;
-#if GLIB_CHECK_VERSION(2,31,0)
     pcap_compile_mtx = g_new(GMutex,1);
     g_mutex_init(pcap_compile_mtx);
-#else
-    pcap_compile_mtx = g_mutex_new();
-#endif
+#ifdef HAVE_LIBPCAP
     compileFilter();
+#endif
 }
 
 CompiledFilterOutput::~CompiledFilterOutput()
@@ -77,18 +61,19 @@ CompiledFilterOutput::~CompiledFilterOutput()
     delete ui;
 }
 
+#ifdef HAVE_LIBPCAP
 void CompiledFilterOutput::compileFilter()
 {
     struct bpf_program fcode;
 
     foreach (QString interfaces, intList_) {
         for (guint i = 0; i < global_capture_opts.all_ifaces->len; i++) {
-            interface_t device = g_array_index(global_capture_opts.all_ifaces, interface_t, i);
+            interface_t *device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
 
-            if (interfaces.compare(device.display_name)) {
+            if (interfaces.compare(device->display_name)) {
                 continue;
             } else {
-                pcap_t *pd = pcap_open_dead(device.active_dlt, WTAP_MAX_PACKET_SIZE);
+                pcap_t *pd = pcap_open_dead(device->active_dlt, WTAP_MAX_PACKET_SIZE_STANDARD);
                 if (pd == NULL)
                     break;
                 g_mutex_lock(pcap_compile_mtx);
@@ -115,6 +100,7 @@ void CompiledFilterOutput::compileFilter()
         }
     }
 }
+#endif
 
 void CompiledFilterOutput::on_interfaceList_currentItemChanged(QListWidgetItem *current, QListWidgetItem *)
 {
@@ -128,8 +114,6 @@ void CompiledFilterOutput::copyFilterText()
 {
     wsApp->clipboard()->setText(ui->filterList->toPlainText());
 }
-
-#endif /* HAVE_LIBPCAP */
 
 //
 // Editor modelines  -  http://www.wireshark.org/tools/modelines.html

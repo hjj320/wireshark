@@ -10,19 +10,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "config.h"
 
@@ -783,14 +771,12 @@ static int dissect_devicenet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     return tvb_captured_length(tvb);
 }
 
-static int devicenet_addr_to_str(const address* addr, gchar *buf, int buf_len _U_)
+static int devicenet_addr_to_str(const address* addr, gchar *buf, int buf_len)
 {
-    guint8 addrdata = *((const guint8*)addr->data) & 0x3F;
-    gchar *start_buf = buf;
+    const guint8 *addrdata = (const guint8 *)addr->data;
 
-    buf = uint_to_str_back(buf, addrdata);
-    *buf = '\0';
-    return (int)(buf-start_buf+1);
+    guint32_to_str_buf(*addrdata, buf, buf_len);
+    return (int)strlen(buf);
 }
 
 static int devicenet_addr_str_len(const address* addr _U_)

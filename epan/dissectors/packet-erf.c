@@ -5,19 +5,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -131,12 +119,27 @@ static int hf_erf_ehdr_flow_id_flow_hash = -1;
 static int hf_erf_ehdr_host_id_sourceid          = -1;
 static int hf_erf_ehdr_host_id_hostid            = -1;
 
+/* Anchor ID extension header */
+static int hf_erf_ehdr_anchor_id_definition    = -1;
+static int hf_erf_ehdr_anchor_id_reserved    = -1;
+static int hf_erf_ehdr_anchor_id_anchorid   = -1;
+static int hf_erf_ehdr_anchor_id_flags   = -1;
+
+static int hf_erf_anchor_linked            = -1;
+static int hf_erf_anchor_anchorid          = -1;
+static int hf_erf_anchor_hostid            = -1;
+
 /* Generated Host ID/Source ID */
 static int hf_erf_sourceid       = -1;
 static int hf_erf_hostid         = -1;
 static int hf_erf_source_current = -1;
 static int hf_erf_source_next    = -1;
 static int hf_erf_source_prev    = -1;
+
+/* Entropy extension header */
+static int hf_erf_ehdr_entropy_entropy = -1;
+static int hf_erf_ehdr_entropy_entropy_raw = -1;
+static int hf_erf_ehdr_entropy_reserved = -1;
 
 /* Unknown extension header */
 static int hf_erf_ehdr_unk = -1;
@@ -247,6 +250,9 @@ static gint ett_erf_eth        = -1;
 static gint ett_erf_meta       = -1;
 static gint ett_erf_meta_tag   = -1;
 static gint ett_erf_source     = -1;
+static gint ett_erf_anchor     = -1;
+static gint ett_erf_anchor_flags = -1;
+static gint ett_erf_entropy_value = -1;
 
 static expert_field ei_erf_extension_headers_not_shown = EI_INIT;
 static expert_field ei_erf_packet_loss = EI_INIT;
@@ -385,7 +391,7 @@ static dissector_handle_t sdh_handle;
 #define ETH_OFF_MASK  0x00
 #define ETH_RES1_MASK 0x00
 
-/* Invalid MetaERF sections used for special lookup */
+/* Invalid Provenance sections used for special lookup */
 #define ERF_META_SECTION_NONE 0
 #define ERF_META_SECTION_UNKNOWN 1
 
@@ -434,11 +440,32 @@ static const value_string ehdr_type_vals[] = {
   { ERF_EXT_HDR_TYPE_BFS            , "BFS Filter/Hash"},
   { ERF_EXT_HDR_TYPE_CHANNELISED    , "Channelised"},
   { ERF_EXT_HDR_TYPE_SIGNATURE      , "Signature"},
+  { ERF_EXT_HDR_TYPE_PKT_ID         , "Packet ID"},
   { ERF_EXT_HDR_TYPE_FLOW_ID        , "Flow ID"},
   { ERF_EXT_HDR_TYPE_HOST_ID        , "Host ID"},
+  { ERF_EXT_HDR_TYPE_ANCHOR_ID      , "Anchor ID"},
+  { ERF_EXT_HDR_TYPE_ENTROPY        , "Entropy"},
   { 0, NULL }
 };
 
+/* Used for Provenance ext_hdrs_added/remvoed, should match the field abbreviation */
+static const value_string ehdr_type_vals_short[] = {
+  { ERF_EXT_HDR_TYPE_CLASSIFICATION , "class"},
+  { ERF_EXT_HDR_TYPE_INTERCEPTID    , "int"},
+  { ERF_EXT_HDR_TYPE_RAW_LINK       , "raw"},
+  { ERF_EXT_HDR_TYPE_BFS            , "bfs"},
+  { ERF_EXT_HDR_TYPE_CHANNELISED    , "chan"},
+  { ERF_EXT_HDR_TYPE_SIGNATURE      , "signature"},
+  { ERF_EXT_HDR_TYPE_PKT_ID         , "packetid"},
+  { ERF_EXT_HDR_TYPE_FLOW_ID        , "flowid"},
+  { ERF_EXT_HDR_TYPE_HOST_ID        , "hostid"},
+  { ERF_EXT_HDR_TYPE_ANCHOR_ID      , "anchorid"},
+  { ERF_EXT_HDR_TYPE_ENTROPY        , "entropy"},
+  { 0, NULL }
+};
+
+/* XXX: Must be at least array_length(ehdr_type_vals). */
+#define ERF_HF_VALUES_PER_TAG 32
 
 static const value_string raw_link_types[] = {
   { 0x00, "raw SONET"},
@@ -558,7 +585,7 @@ static const value_string erf_clk_state[] = {
 };
 
 static const value_string erf_clk_link_mode[] = {
-  { 0x00, "Inavild"},
+  { 0x00, "Invalid"},
   { 0x01, "Not Connected"},
   { 0x02, "Master"},
   { 0x03, "Disabled Master"},
@@ -573,6 +600,39 @@ static const value_string erf_clk_port_proto[] = {
   { 0x03, "IRIG-B" },
   { 0x04, "Ethernet" },
   { 0, NULL }
+};
+
+static const value_string erf_tap_mode[] = {
+  { 0x00, "Invalid" },
+  { 0x01, "Off" },
+  { 0x02, "Active" },
+  { 0x03, "Monitor" },
+  { 0x04, "Bypass" },
+  { 0x05, "Blocking" },
+  { 0, NULL }
+};
+
+static const value_string erf_tap_fail_mode[] = {
+  { 0x00, "Invalid" },
+  { 0x01, "Off" },
+  { 0x02, "Open" },
+  { 0x03, "Closed" },
+  { 0, NULL }
+};
+
+static const value_string erf_dpi_state[] = {
+  { 0x00, "Terminated"},
+  { 0x01, "Inspecting"},
+  { 0x02, "Monitoring"},
+  { 0x03, "Classified"},
+  { 0, NULL}
+};
+
+static const value_string erf_flow_state[] = {
+  { 0x00, "Active"},
+  { 0x01, "Terminated"},
+  { 0x02, "Expired"},
+  { 0, NULL}
 };
 
 /* Used as templates for ERF_META_TAG_tunneling_mode */
@@ -618,8 +678,24 @@ static const header_field_info erf_parent_section[] = {
   { "Section ID", "section_id", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }
 };
 
-/* XXX: Must be at least array_length(erf_tunneling_modes). */
-#define ERF_HF_VALUES_PER_TAG 8
+/* Used as templates for ERF_META_TAG_stream_flags */
+static const header_field_info erf_stream_flags[] = {
+  { "Relative Snapping", "relative_snap", FT_BOOLEAN, 32, NULL, 0x1, NULL, HFILL },
+  { "Entropy Snapping", "entropy_snap", FT_BOOLEAN, 32, NULL, 0x2, NULL, HFILL }
+};
+
+/* Used as templates for ERF_META_TAG_ext_hdrs_added/removed subtrees */
+static const header_field_info erf_ext_hdr_items[] = {
+  { "Extension Headers 0 to 31", "0_31", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL },
+  { "Extension Headers 32 to 63", "32_63", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL },
+  { "Extension Headers 64 to 95", "64_95", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL },
+  { "Extension Headers 96 to 127", "96_127", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }
+};
+
+/* Used as templates for ERF_META_TAG_smart_trunc_default */
+static const header_field_info erf_smart_trunc_default_flags[] = {
+  { "Truncation Candidate", "trunc_candidate", FT_BOOLEAN, 32, &tfs_yes_no, 0x1, NULL, HFILL }
+};
 
 typedef struct {
   guint16 code;
@@ -629,9 +705,12 @@ typedef struct {
 typedef struct {
   gint ett_value;
   /*
-   * XXX: Must be at least array_length(erf_tunneling_modes). Should change to
+   * XXX: Must be at least array_length(ehdr_type_vals). Should change to
    * dynamic (possibly using new proto tree API) if many more fields defined.
+   * Non-trivial as bitmask functions take an array of pointers not values.
    * Either that or add a value-string-like automatic bitmask flags proto_item.
+   *
+   * Note that this struct is only added for tags that need it.
    */
   int hf_values[ERF_HF_VALUES_PER_TAG];
 } erf_meta_tag_info_ex_t;
@@ -659,6 +738,7 @@ typedef struct {
 
 typedef struct {
   wmem_map_t* source_map;
+  wmem_map_t* host_anchor_map;
   guint64 implicit_host_id;
 } erf_state_t;
 
@@ -666,6 +746,20 @@ typedef struct {
   wmem_tree_t* meta_tree;
   wmem_list_t* meta_list;
 } erf_source_info_t;
+
+typedef struct {
+  guint frame_num;
+} erf_anchored_info_t;
+
+typedef struct {
+  wmem_tree_t* anchored_tree;
+  wmem_list_t* anchored_list;
+} erf_host_anchor_info_t;
+
+typedef struct {
+  guint64 host_id;
+  guint64 anchor_id;
+} erf_anchor_key_t;
 
 #define ERF_SOURCE_KEY(host_id, source_id) (((guint64) host_id << 16) | source_id)
 #define ERF_TAG_INFO_KEY(tag_info) (((guint32) (tag_info)->section << 16) | (tag_info)->code)
@@ -733,6 +827,12 @@ static const erf_meta_hf_template_t erf_meta_tags[] = {
   { ERF_META_TAG_cpu_numa_nodes,    { "CPU NUMA Nodes",                     "cpu_numa_nodes",    FT_UINT32,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_dag_attribute,     { "DAG Attribute",                      "dag_attribute",     FT_STRING,        BASE_NONE,         NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_dag_version,       { "DAG Software Version",               "dag_version",       FT_STRING,        BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_stream_flags,      { "Stream Flags",                       "stream_flags",      FT_UINT32,        BASE_HEX,          NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_entropy_threshold, { "Entropy Threshold",                  "entropy_threshold", FT_FLOAT,         BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_smart_trunc_default, { "Smart Truncation Default",         "smart_trunc_default",FT_UINT32,       BASE_DEC,          NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_ext_hdrs_added,    { "Extension Headers Added",            "ext_hdrs_added",    FT_BYTES,         BASE_NO_DISPLAY_VALUE, NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_ext_hdrs_removed,  { "Extension Headers Removed",          "ext_hdrs_removed",  FT_BYTES,         BASE_NO_DISPLAY_VALUE, NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_relative_snaplen,  { "Relative Snap Length",               "relative_snaplen",  FT_UINT32,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
 
   { ERF_META_TAG_if_num,            { "Interface Number",                   "if_num",            FT_UINT32,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_if_vc,             { "Interface Virtual Circuit",          "if_vc",             FT_UINT32,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
@@ -755,6 +855,10 @@ static const erf_meta_hf_template_t erf_meta_tags[] = {
   { ERF_META_TAG_if_phy_mode,       { "Interface Endace PHY Mode",          "if_phy_mode",       FT_STRING,        BASE_NONE,         NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_if_port_type,      { "Interface Port Type",                "if_port_type",      FT_UINT32,        BASE_DEC,          VALS(erf_port_type), 0x0, NULL, HFILL } },
   { ERF_META_TAG_if_rx_latency,     { "Interface Uncorrected RX Latency",   "if_rx_latency",     FT_RELATIVE_TIME, BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_tap_mode,          { "Tap Mode",                           "tap_mode",          FT_UINT32,        BASE_DEC,          VALS(erf_tap_mode), 0x0, NULL, HFILL } },
+  { ERF_META_TAG_tap_fail_mode,     { "Tap Failover Mode",                  "tap_fail_mode",     FT_UINT32,        BASE_DEC,          VALS(erf_tap_fail_mode), 0x0, NULL, HFILL } },
+  { ERF_META_TAG_watchdog_expired,  { "Watchdog Expired",                   "watchdog_expired",  FT_UINT32,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_watchdog_interval, { "Watchdog Interval (ms)",             "watchdog_interval", FT_UINT32,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
 
   { ERF_META_TAG_src_ipv4,          { "Source IPv4 address",                "src_ipv4",          FT_IPv4,          BASE_NONE,         NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_dest_ipv4,         { "Destination IPv4 address",           "dest_ipv4",         FT_IPv4,          BASE_NONE,         NULL, 0x0, NULL, HFILL } },
@@ -775,10 +879,25 @@ static const erf_meta_hf_template_t erf_meta_tags[] = {
   { ERF_META_TAG_src_port,          { "Source Port",                        "src_port",          FT_UINT32,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_dest_port,         { "Destination Port",                   "dest_port",         FT_UINT32,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_ip_proto,          { "IP Protocol",                        "ip_proto",          FT_UINT32,        BASE_DEC|BASE_EXT_STRING, &ipproto_val_ext, 0x0, NULL, HFILL } },
-  { ERF_META_TAG_flow_hash,         { "Flow Hash",                          "flow_hash",         FT_UINT32,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_flow_hash,         { "Flow Hash",                          "flow_hash",         FT_UINT32,        BASE_HEX,          NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_filter_match,      { "Filter Match",                       "filter_match",      FT_STRING,        BASE_NONE,         NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_filter_match_name, { "Filter Match Name",                  "filter_match_name", FT_STRING,        BASE_NONE,         NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_error_flags,       { "Error Flags",                        "error_flags",       FT_BYTES,         BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_initiator_pkts,    { "Initiator Packets",                  "initiator_pkts",    FT_UINT64,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_responder_pkts,    { "Responder Packets",                  "responder_pkts",    FT_UINT64,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_initiator_bytes,   { "Initiator Bytes",                    "initiator_bytes",   FT_UINT64,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_responder_bytes,   { "Responder Bytes",                    "responder_bytes",   FT_UINT64,        BASE_DEC,          NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_initiator_min_entropy, { "Initiator Minimum Entropy",      "initiator_min_entropy", FT_FLOAT,     BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_responder_min_entropy, { "Responder Minimum Entropy",      "responder_min_entropy", FT_FLOAT,     BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_initiator_avg_entropy, { "Initiator Average Entropy",      "initiator_avg_entropy", FT_FLOAT,     BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_responder_avg_entropy, { "Responder Average Entropy",      "responder_avg_entropy", FT_FLOAT,     BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_initiator_max_entropy, { "Initiator Maximum Entropy",      "initiator_max_entropy", FT_FLOAT,     BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_responder_max_entropy, { "Responder Maximum Entropy",      "responder_max_entropy", FT_FLOAT,     BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_dpi_application,       { "DPI Application",                "dpi_application",   FT_STRING,        BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_dpi_confidence,        { "DPI Confidence",                 "dpi_confidence",    FT_STRING,        BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_dpi_state,             { "DPI State",                      "dpi_state",         FT_UINT32,        BASE_NONE,         VALS(erf_dpi_state), 0x0, NULL, HFILL } },
+  { ERF_META_TAG_dpi_protocol_stack,    { "DPI Protocol Stack",             "dpi_protocol_stack", FT_STRING,        BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_flow_state,            { "Flow State",                     "flow_state",        FT_UINT32,        BASE_NONE,         VALS(erf_flow_state), 0x0, NULL, HFILL } },
 
   { ERF_META_TAG_start_time,        { "Start Time",                         "start_time",        FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_end_time,          { "End Time",                           "end_time",          FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0, NULL, HFILL } },
@@ -818,7 +937,7 @@ static const erf_meta_hf_template_t erf_meta_tags[] = {
   { ERF_META_TAG_ns_dns_ipv6,       { "Nameserver IPv6 address",            "ns_dns_ipv6",       FT_IPv6,          BASE_NONE,         NULL, 0x0, NULL, HFILL } },
 
   { ERF_META_TAG_exthdr,            { "ERF Extension Header",               "exthdr",            FT_BYTES,         BASE_NONE,         NULL, 0x0, NULL, HFILL } },
-  { ERF_META_TAG_pcap_ng_block,     { "PCAP-NG Block",                      "pcap_ng_block",     FT_BYTES,         BASE_NONE,         NULL, 0x0, NULL, HFILL } },
+  { ERF_META_TAG_pcap_ng_block,     { "Pcapng Block",                       "pcap_ng_block",     FT_BYTES,         BASE_NONE,         NULL, 0x0, NULL, HFILL } },
   { ERF_META_TAG_asn1,              { "ASN.1",                              "asn1",              FT_BYTES,         BASE_NONE,         NULL, 0x0, NULL, HFILL } },
 
   { ERF_META_TAG_clk_source,             { "Clock Source",                  "clk_source",             FT_UINT32,   BASE_DEC,          VALS(erf_clk_source), 0x0, NULL, HFILL } },
@@ -994,6 +1113,34 @@ init_tag_value_subfields(wmem_array_t *hfri_table, erf_meta_tag_info_t *tag_info
 }
 
 static erf_meta_tag_info_t*
+init_ext_hdrs_tag_value_subfields(wmem_array_t *hfri_table, erf_meta_tag_info_t *tag_info)
+{
+  gsize                i = 0;
+  gsize                num_known_ext_hdrs = array_length(ehdr_type_vals) -1 /*null terminated*/;
+  hf_register_info     hfri_tmp = { NULL, { NULL, NULL, FT_BOOLEAN, 32, NULL, 0x1, NULL, HFILL } }; /* Value, will be filled from template */
+
+  DISSECTOR_ASSERT(array_length(ehdr_type_vals_short) > num_known_ext_hdrs);
+  /* XXX: this currently supports only up to 27 known extension headers */
+  DISSECTOR_ASSERT(ERF_HF_VALUES_PER_TAG > num_known_ext_hdrs - 4); /* -1 sentinel terminated */
+  /* Use the first 4 hf_values for 32-bit subtree */
+  init_tag_value_subfields(hfri_table, tag_info, erf_ext_hdr_items, array_length(erf_ext_hdr_items));
+  DISSECTOR_ASSERT(tag_info->extra);
+
+  /*Fill in the rest of the remaining 27 entries with any known tag entries values */
+  for (i = 0; i < num_known_ext_hdrs; i++) {
+    /* Add value subfield */
+    hfri_tmp.p_id = &tag_info->extra->hf_values[4+i];
+    hfri_tmp.hfinfo.bitmask = (guint64)1 << ehdr_type_vals[i].value;
+    hfri_tmp.hfinfo.name = ehdr_type_vals[i].strptr;
+    hfri_tmp.hfinfo.abbrev = wmem_strconcat(wmem_epan_scope(),
+      "erf.meta.", tag_info->section_template->hfinfo.abbrev, ".", tag_info->tag_template->hfinfo.abbrev, ".", ehdr_type_vals_short[i].strptr, NULL);
+    wmem_array_append_one(hfri_table, hfri_tmp);
+  }
+
+  return tag_info;
+}
+
+static erf_meta_tag_info_t*
 init_ns_addr_tag_value_fields(wmem_array_t *hfri_table, erf_meta_tag_info_t *tag_info)
 {
   header_field_info ns_addr_extra_fields[] = {
@@ -1069,6 +1216,17 @@ init_tag_fields(wmem_array_t *hfri_table, wmem_array_t *ett_table, const erf_met
     break;
   case ERF_META_TAG_ptp_gm_clock_quality:
     init_tag_value_subfields(hfri_table, tag_info, erf_ptp_clock_quality, array_length(erf_ptp_clock_quality));
+    break;
+    case ERF_META_TAG_stream_flags:
+    init_tag_value_subfields(hfri_table, tag_info, erf_stream_flags, array_length(erf_stream_flags));
+    break;
+  case ERF_META_TAG_smart_trunc_default:
+    init_tag_value_subfields(hfri_table, tag_info, erf_smart_trunc_default_flags, array_length(erf_smart_trunc_default_flags));
+    break;
+  case ERF_META_TAG_ext_hdrs_added:
+  case ERF_META_TAG_ext_hdrs_removed:
+    init_ext_hdrs_tag_value_subfields(hfri_table, tag_info);
+    break;
   }
 
   /* Add ett entries */
@@ -1142,6 +1300,55 @@ init_meta_tags(void)
   wmem_array_append_one(erf_meta_index.vs_abbrev_list, vs_tmp);
   /* TODO: try value_string_ext, requires sorting first */
 }
+
+static guint erf_anchor_key_hash(gconstpointer key) {
+  const erf_anchor_key_t *anchor_key = (const erf_anchor_key_t*) key;
+
+  return ((guint32)anchor_key->host_id ^ (guint32)anchor_key->anchor_id);
+
+}
+
+static gboolean erf_anchor_key_equal(gconstpointer a, gconstpointer b) {
+  const erf_anchor_key_t *anchor_key_a = (const erf_anchor_key_t*) a ;
+  const erf_anchor_key_t *anchor_key_b = (const erf_anchor_key_t*) b ;
+
+  return (anchor_key_a->host_id) == (anchor_key_b->host_id) &&
+    (anchor_key_a->anchor_id & ERF_EXT_HDR_TYPE_ANCHOR_ID) == (anchor_key_b->anchor_id & ERF_EXT_HDR_TYPE_ANCHOR_ID);
+}
+
+static void erf_host_anchor_info_insert(packet_info *pinfo, guint64 host_id, guint64 anchor_id, guint8 flags _U_) {
+  erf_host_anchor_info_t *anchor_info;
+  erf_anchor_key_t key = {host_id, anchor_id};
+  erf_anchored_info_t *anchored_info;
+
+  anchor_info = (erf_host_anchor_info_t*)wmem_map_lookup(erf_state.host_anchor_map, &key);
+
+  if(!anchor_info) {
+    erf_anchor_key_t *key_ptr = wmem_new(wmem_file_scope(), erf_anchor_key_t);
+    *key_ptr = key;
+
+    anchor_info = (erf_host_anchor_info_t*) wmem_new(wmem_file_scope(), erf_host_anchor_info_t);
+    anchor_info->anchored_tree = wmem_tree_new(wmem_file_scope());
+    anchor_info->anchored_list = wmem_list_new(wmem_file_scope());
+
+    wmem_map_insert(erf_state.host_anchor_map, key_ptr, anchor_info);
+  }
+
+  /* Information about this frame associated with the Anchor ID */
+  anchored_info = (erf_anchored_info_t*)wmem_tree_lookup32(anchor_info->anchored_tree, pinfo->num);
+  if(!anchored_info) {
+    /* anchored_info not found */
+    anchored_info = (erf_anchored_info_t*)wmem_new(wmem_file_scope(), erf_anchored_info_t);
+    anchored_info->frame_num = pinfo->num;
+
+    wmem_list_append(anchor_info->anchored_list, anchored_info);
+    wmem_tree_insert32(anchor_info->anchored_tree, pinfo->num, anchored_info);
+  }
+  else {
+    return;
+  }
+}
+
 
 static int
 erf_source_append(guint64 host_id, guint8 source_id, guint32 num)
@@ -1536,6 +1743,25 @@ dissect_host_id_ex_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, i
 }
 
 static void
+dissect_anchor_id_ex_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int idx)
+{
+  static const int *anchor_flags[] =
+  {
+    &hf_erf_ehdr_anchor_id_definition,
+    &hf_erf_ehdr_anchor_id_reserved,
+    NULL
+  };
+
+  if(tree) {
+    guint64     hdr = pinfo->pseudo_header->erf.ehdr_list[idx].ehdr;
+
+    proto_tree_add_bitmask_value(tree, tvb, 0, hf_erf_ehdr_anchor_id_flags, ett_erf_anchor_flags, anchor_flags, (guint8)(hdr >> 48) & 0xff);
+    proto_tree_add_uint64(tree, hf_erf_ehdr_anchor_id_anchorid, tvb, 0, 0, (hdr & ERF_EHDR_ANCHOR_ID_MASK));
+  }
+}
+
+
+static void
 dissect_flow_id_ex_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int idx)
 {
   if(tree) {
@@ -1545,6 +1771,115 @@ dissect_flow_id_ex_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, i
     proto_tree_add_uint(tree, hf_erf_ehdr_flow_id_hash_type,  tvb, 0, 0, (guint8)((hdr >> 40) & 0xFF));
     proto_tree_add_uint(tree, hf_erf_ehdr_flow_id_stack_type, tvb, 0, 0, (guint8)((hdr >> 32) & 0xFF));
     proto_tree_add_uint(tree, hf_erf_ehdr_flow_id_flow_hash,  tvb, 0, 0, (guint32)(hdr & 0xFFFFFFFF));
+  }
+}
+
+static float
+entropy_from_entropy_header_value(guint8 entropy_hdr_value)
+{
+  /* mapping 1-255 to 0.0-8.0 */
+  /*  255 is 8.0 */
+  /* 1 represent any value less than 2/32 */
+  /* 0 represents not calculated */
+  return (float)((entropy_hdr_value == 0)?0.0: (((float)entropy_hdr_value+1) / 32.0));
+}
+
+static void
+dissect_entropy_ex_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int idx)
+{
+  if(tree) {
+    guint64     hdr = pinfo->pseudo_header->erf.ehdr_list[idx].ehdr;
+    guint8      entropy_hdr_value = (guint8)((hdr >> 48) & 0xFF);
+    float      entropy;
+    proto_item *pi;
+    proto_tree *entropy_value_tree;
+
+    entropy = entropy_from_entropy_header_value(entropy_hdr_value);
+
+    pi = proto_tree_add_float_format_value(tree, hf_erf_ehdr_entropy_entropy, tvb, 0, 0, entropy,
+      "%.2f %s", entropy, entropy == 0.0 ? "(not calculated)":"bits");
+    entropy_value_tree = proto_item_add_subtree(pi, ett_erf_entropy_value);
+    proto_tree_add_uint(entropy_value_tree, hf_erf_ehdr_entropy_entropy_raw, tvb, 0, 0, entropy_hdr_value);
+
+    proto_tree_add_uint64(tree, hf_erf_ehdr_entropy_reserved, tvb, 0, 0, (hdr & 0xFFFFFFFFFFFF));
+  }
+}
+
+static guint64
+find_host_id(packet_info *pinfo, gboolean *has_anchor_definition) {
+  guint64     hdr;
+  guint8      type;
+  guint8      has_more = pinfo->pseudo_header->erf.phdr.type & 0x80;
+  int         i = 0;
+  guint64     host_id = ERF_META_HOST_ID_IMPLICIT;
+  gboolean    anchor_definition = FALSE;
+
+  while(has_more && (i < MAX_ERF_EHDR)) {
+    hdr = pinfo->pseudo_header->erf.ehdr_list[i].ehdr;
+    type = (guint8) (hdr >> 56);
+
+    switch (type & 0x7f) {
+      case ERF_EXT_HDR_TYPE_HOST_ID:
+        if (host_id == ERF_META_HOST_ID_IMPLICIT)
+          host_id = hdr & ERF_EHDR_HOST_ID_MASK;
+        break;
+      case ERF_EXT_HDR_TYPE_ANCHOR_ID:
+        if ((hdr & ERF_EHDR_ANCHOR_ID_DEFINITION_MASK))
+          anchor_definition = TRUE;
+        break;
+    }
+    has_more = type & 0x80;
+    i += 1;
+  }
+
+  if (has_anchor_definition)
+    *has_anchor_definition = anchor_definition;
+
+  return host_id;
+}
+
+static void dissect_host_anchor_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint64 host_id, guint64 anchor_id, guint8 anchor _U_) {
+
+  if(tree) {
+    erf_anchor_key_t key = {host_id, anchor_id};
+    erf_host_anchor_info_t *anchor_info;
+    erf_anchored_info_t *anchored_info;
+    wmem_list_frame_t *frame;
+    wmem_list_t *frame_list;
+    proto_item *pi = NULL;
+    proto_tree *subtree;
+
+    /* TODO: top level linking to most recent frame like we have for Host ID? */
+    subtree = proto_tree_add_subtree_format(tree, tvb, 0, 0, ett_erf_anchor, &pi, "Host ID: 0x%012" G_GINT64_MODIFIER "x, Anchor ID: 0x%012" G_GINT64_MODIFIER "x", host_id & ERF_EHDR_HOST_ID_MASK, anchor_id & ERF_EHDR_ANCHOR_ID_MASK);
+    PROTO_ITEM_SET_GENERATED(pi);
+
+    pi = proto_tree_add_uint64(subtree, hf_erf_anchor_hostid, tvb, 0, 0, host_id & ERF_EHDR_HOST_ID_MASK);
+    PROTO_ITEM_SET_GENERATED(pi);
+    pi = proto_tree_add_uint64(subtree, hf_erf_anchor_anchorid, tvb, 0, 0, anchor_id & ERF_EHDR_ANCHOR_ID_MASK);
+    PROTO_ITEM_SET_GENERATED(pi);
+
+    anchor_info = (erf_host_anchor_info_t*)wmem_map_lookup(erf_state.host_anchor_map, &key);
+
+    if(!anchor_info) {
+      return;
+    }
+
+    frame_list = anchor_info->anchored_list;
+
+    /* Try to link frames */
+    frame = wmem_list_head(frame_list);
+    while(frame != NULL) {
+      anchored_info = (erf_anchored_info_t*)wmem_list_frame_data(frame);
+      if(pinfo->num != anchored_info->frame_num) {
+        /* Don't list the frame itself */
+        pi = proto_tree_add_uint(subtree, hf_erf_anchor_linked, tvb, 0, 0, anchored_info->frame_num);
+        PROTO_ITEM_SET_GENERATED(pi);
+        /* XXX: Need to do this each time because pinfo is discarded. Filtering does not reset visited as it does not do a full redissect.
+        We also might not catch all frames in the first pass (e.g. comment after record). */
+        mark_frame_as_depended_upon(pinfo, anchored_info->frame_num);
+      }
+      frame = wmem_list_frame_next(frame);
+    }
   }
 }
 
@@ -1586,10 +1921,13 @@ dissect_host_id_source_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
     if (fnum_next != G_MAXUINT32) {
       pi = proto_tree_add_uint(hostid_tree, hf_erf_source_next, tvb, 0, 0, fnum_next);
       PROTO_ITEM_SET_GENERATED(pi);
+      /* XXX: Save the surrounding nearest periodic records when we do a filtered save so we keep native ERF metadata */
+      mark_frame_as_depended_upon(pinfo, fnum_next);
     }
     if (fnum != G_MAXUINT32) {
       pi = proto_tree_add_uint(hostid_tree, hf_erf_source_prev, tvb, 0, 0, fnum);
       PROTO_ITEM_SET_GENERATED(pi);
+      mark_frame_as_depended_upon(pinfo, fnum);
     }
   }
 }
@@ -1897,6 +2235,27 @@ dissect_erf_pseudo_extension_header(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 
   guint64     host_id        = ERF_META_HOST_ID_IMPLICIT;
   guint8      source_id      = 0;
+  gboolean    found_host_id  = FALSE;
+  gboolean    has_anchor_definition = FALSE;
+
+  /*
+   * Get the first Host ID of the record (which may not be the first extension
+   * header).
+   */
+  host_id = find_host_id(pinfo, &has_anchor_definition);
+  if (host_id == ERF_META_HOST_ID_IMPLICIT) {
+    /*
+     * XXX: We are relying here on the Wireshark doing a second parse any
+     * time it does anything with tree items (including filtering) to associate
+     * the records before the first ERF_TYPE_META record. This does not work
+     * with TShark in one-pass mode, in which case the first few records get
+     * Host ID 0 (unset).
+     */
+    host_id = erf_state.implicit_host_id;
+    found_host_id = FALSE;
+  } else {
+    found_host_id = TRUE;
+  }
 
   while(has_more && (i < max)) {
     hdr = pinfo->pseudo_header->erf.ehdr_list[i].ehdr;
@@ -1944,11 +2303,31 @@ dissect_erf_pseudo_extension_header(tvbuff_t *tvb, packet_info *pinfo, proto_tre
             erf_state.implicit_host_id = host_id;
           }
 
-          /* Add to the sequence of ERF_TYPE_META records */
-          erf_source_append(host_id, source_id, pinfo->num);
+          /* Add to the sequence of ERF_TYPE_META records if periodic record */
+          /*
+           * Adding metadata from comment records makes for unhelpful linking
+           * and means we miss out on the correct frame when marking surrounding
+           * metadata as depended upon (e.g. could end up with a comment from
+           * another frame). We mark the anchor linked records separately.
+           */
+          if (!has_anchor_definition) {
+            /* XXX: this is a heuristic, technically we could have non-local sections
+              in the metadata even as an anchor definition record. */
+            erf_source_append(host_id, source_id, pinfo->num);
+          }
         }
       }
       dissect_host_id_source_id(tvb, pinfo, tree, host_id, source_id);
+      break;
+    case ERF_EXT_HDR_TYPE_ANCHOR_ID:
+      dissect_anchor_id_ex_header(tvb, pinfo, ehdr_tree, i);
+      if (!PINFO_FD_VISITED(pinfo)) {
+        erf_host_anchor_info_insert(pinfo, host_id, hdr & ERF_EHDR_ANCHOR_ID_MASK, (guint8)(hdr >> 48));
+      }
+      dissect_host_anchor_id(tvb, pinfo, tree, host_id, hdr & ERF_EHDR_ANCHOR_ID_MASK, (guint8)(hdr >> 48));
+      break;
+    case ERF_EXT_HDR_TYPE_ENTROPY:
+      dissect_entropy_ex_header(tvb, pinfo, ehdr_tree, i);
       break;
     default:
       dissect_unknown_ex_header(tvb, pinfo, ehdr_tree, i);
@@ -1965,16 +2344,7 @@ dissect_erf_pseudo_extension_header(tvbuff_t *tvb, packet_info *pinfo, proto_tre
   /* If we have no explicit Host ID association, associate with the first Source ID (or 0) and implicit Host ID */
   /* XXX: We are allowed to assume there is only one Source ID unless we have
    * a Host ID extension header */
-  if (host_id == ERF_META_HOST_ID_IMPLICIT) {
-    /*
-     * XXX: We are relying here on the Wireshark doing a second parse any
-     * time it does anything with tree items (including filtering) to associate
-     * the records before the first ERF_TYPE_META record. This does not work
-     * with TShark in one-pass mode, in which case the first few records get
-     * Host ID 0 (unset).
-     */
-    host_id = erf_state.implicit_host_id;
-
+  if (!found_host_id) {
     /*
      * TODO: Do we also want to track Host ID 0 Source ID 0 records?
      * Don't for now to preserve feel of legacy files.
@@ -2051,6 +2421,77 @@ dissect_meta_tag_bitfield(proto_item *section_tree, tvbuff_t *tvb, int offset, e
   tag_pi = proto_tree_add_bitmask_with_flags(section_tree, tvb, offset + 4, tag_info->hf_value, tag_info->ett, hf_flags, ENC_BIG_ENDIAN, BMT_NO_FLAGS);
   if (out_tag_tree) {
     *out_tag_tree = proto_item_get_subtree(tag_pi);
+  }
+
+  return tag_pi;
+}
+
+static proto_item*
+dissect_meta_tag_ext_hdrs(proto_item *section_tree, tvbuff_t *tvb, int offset, gint taglength, erf_meta_tag_info_t *tag_info, proto_item **out_tag_tree, expert_field **out_truncated_expert)
+{
+  proto_item *tag_pi        = NULL;
+  proto_tree *subtree       = NULL;
+  proto_item *subtree_pi    = NULL;
+  int i;
+  guint32 ext_hdrs[4] = {0, 0, 0, 0};
+  int int_offset      = 0;
+  int int_avail       = MIN(taglength / 4, 4);;
+  int bit_offset      = 0;
+  int ext_hdr_num     = 0;
+  gboolean first      = TRUE;
+  gboolean all_set    = TRUE;
+
+  DISSECTOR_ASSERT(tag_info->extra);
+
+  tag_pi = proto_tree_add_item(section_tree, tag_info->hf_value, tvb, offset + 4, taglength, ENC_BIG_ENDIAN);
+  *out_tag_tree = proto_item_add_subtree(tag_pi, tag_info->ett);
+
+  for (int_offset = 0; int_offset < int_avail; int_offset++) {
+    ext_hdrs[int_offset] = tvb_get_guint32(tvb, offset + 4 + int_offset*4, ENC_BIG_ENDIAN);
+    if (ext_hdrs[int_offset] != G_MAXUINT32)
+      all_set = FALSE;
+  }
+
+  /* Special case: all specified bits are 1 means all extension headers */
+  if (all_set)
+    proto_item_append_text(tag_pi, ": <All>");
+
+  /* Add 4 subtrees, one for each uint32 representing 32 extension header numbers */
+  for (int_offset = 0; int_offset < int_avail; int_offset++) {
+    /* TODO: Put subtree hf values somewhere better than first 4 hf_values */
+    subtree_pi = proto_tree_add_item(*out_tag_tree, tag_info->extra->hf_values[int_offset], tvb, offset + 4 + int_offset*4, 4, ENC_BIG_ENDIAN);
+
+    /* Add the individual bit dissections */
+    /* XXX: This currently assumes we only know up to the first 32 */
+    if (int_offset == 0) {
+      subtree = proto_item_add_subtree(subtree_pi, tag_info->ett);
+      for (i = 4; tag_info->extra->hf_values[i] != -1; i++) {
+        proto_tree_add_boolean(subtree, tag_info->extra->hf_values[i], tvb, offset + 4 + int_offset*4, 4, ext_hdrs[int_offset]);
+      }
+    }
+
+    /* Add all set bits to the header, including the ones we don't understand */
+    for (bit_offset = 0; bit_offset < 32; bit_offset++) {
+      if (ext_hdrs[int_offset] & (1U << bit_offset)) {
+        proto_item_append_text(subtree_pi, ", %s", val_to_str(ext_hdr_num, ehdr_type_vals, "%d"));
+
+        /* Also add to the top level */
+        if (!all_set)
+          proto_item_append_text(tag_pi, "%s %s", first ? ":" : ",", val_to_str(ext_hdr_num, ehdr_type_vals, "%d"));
+
+        first = FALSE;
+      }
+
+      ext_hdr_num++;
+    }
+  }
+
+  if (first)
+    proto_item_append_text(tag_pi, ": <None>");
+
+  /* Check for truncated tag (i.e. last uint32 is partial) */
+  if (int_avail < 4 && taglength % 4 != 0) {
+    *out_truncated_expert = &ei_erf_meta_truncated_tag;
   }
 
   return tag_pi;
@@ -2161,6 +2602,12 @@ meta_tag_expected_length(erf_meta_tag_info_t *tag_info) {
       /* 16-byte WWNs */
       expected_length = 16;
       break;
+
+    case ERF_META_TAG_ext_hdrs_added:
+    case ERF_META_TAG_ext_hdrs_removed:
+      /* 1 to 4 uint32 fields */
+      expected_length = 4;
+      break;
   }
 
   return expected_length;
@@ -2199,9 +2646,9 @@ dissect_meta_record_tags(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
   int captured_length = (int) tvb_captured_length(tvb);
 
   /* Set column heading title*/
-  col_set_str(pinfo->cinfo, COL_INFO, "MetaERF Record");
+  col_set_str(pinfo->cinfo, COL_INFO, "Provenance Metadata Record");
 
-  /* Go through the sectionss and their tags */
+  /* Go through the sections and their tags */
   /* Not using tvb_captured_length because want to check for overrun */
   while ((remaining_len = captured_length - offset) >= 4) {
     tagtype = tvb_get_ntohs(tvb, offset);
@@ -2271,8 +2718,8 @@ dissect_meta_record_tags(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
       DISSECTOR_ASSERT(tag_info->extra);
 
       tagvalstring = val_to_str(tagtype, VALS(wmem_array_get_raw(erf_meta_index.vs_list)), "Unknown Section (0x%x)");
-      section_tree = proto_tree_add_subtree_format(tree, tvb, offset, 0, tag_info->extra->ett_value, &section_pi, "MetaERF %s", tagvalstring);
-      tag_tree = proto_tree_add_subtree_format(section_tree, tvb, offset, MIN(taglength + 4, remaining_len), tag_info->ett, &tag_pi, "%s Header", tagvalstring);
+      section_tree = proto_tree_add_subtree(tree, tvb, offset, 0, tag_info->extra->ett_value, &section_pi, tagvalstring);
+      tag_tree = proto_tree_add_subtree_format(section_tree, tvb, offset, MIN(taglength + 4, remaining_len), tag_info->ett, &tag_pi, "Provenance %s Header", tagvalstring);
 
       /* XXX: Value may have been truncated (avoiding exception so get custom expertinfos) */
       if (taglength >= 4 && !skip_truncated) {
@@ -2281,8 +2728,15 @@ dissect_meta_record_tags(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
 
         /* Add section_id */
         proto_tree_add_uint(tag_tree, tag_info->hf_value, tvb, offset + 4, 2, sectionid);
-        if (sectionid != 0)
-          proto_item_append_text(section_pi, " %u", sectionid);
+        if (sectionid != 0) {
+          if(sectionid & 0x8000U) {
+            /* Local section */
+            proto_item_append_text(section_pi, " (Local) %u", sectionid & 0x7FFFU);
+          }
+          else {
+            proto_item_append_text(section_pi, " %u", sectionid);
+          }
+        }
 
         /* Add section_len */
         sectionlen_pi = proto_tree_add_uint(tag_tree, tag_info->extra->hf_values[0], tvb, offset + 6, 2, sectionlen);
@@ -2308,7 +2762,7 @@ dissect_meta_record_tags(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
 
       /* Group tags before first section header into a fake section */
       if (offset == 0) {
-        section_tree = proto_tree_add_subtree(tree, tvb, offset, 0, ett_erf_meta, &section_pi, "MetaERF No Section");
+        section_tree = proto_tree_add_subtree(tree, tvb, offset, 0, ett_erf_meta, &section_pi, "No Section");
       }
 
       /* Handle special cases */
@@ -2371,6 +2825,8 @@ dissect_meta_record_tags(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
       case ERF_META_TAG_tunneling_mode:
       case ERF_META_TAG_ptp_time_properties:
       case ERF_META_TAG_ptp_gm_clock_quality:
+      case ERF_META_TAG_stream_flags:
+      case ERF_META_TAG_smart_trunc_default:
         tag_pi = dissect_meta_tag_bitfield(section_tree, tvb, offset, tag_info, &tag_tree);
         break;
 
@@ -2424,6 +2880,28 @@ dissect_meta_record_tags(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
         tag_pi = dissect_relative_time(section_tree, tag_info->hf_value, tvb, offset + 4, taglength, &t);
         break;
       }
+
+      case ERF_META_TAG_entropy_threshold:
+      case ERF_META_TAG_initiator_min_entropy:
+      case ERF_META_TAG_responder_min_entropy:
+      case ERF_META_TAG_initiator_avg_entropy:
+      case ERF_META_TAG_responder_avg_entropy:
+      case ERF_META_TAG_initiator_max_entropy:
+      case ERF_META_TAG_responder_max_entropy:
+      {
+        float entropy;
+        value32 = tvb_get_ntohl(tvb, offset + 4);
+        entropy = entropy_from_entropy_header_value(value32);
+
+        tag_pi = proto_tree_add_float_format_value(section_tree, tag_info->hf_value, tvb, 0, 0, entropy,
+          "%.2f %s", entropy, entropy == 0.0 ? "(not calculated)":"bits");
+        break;
+      }
+
+      case ERF_META_TAG_ext_hdrs_added:
+      case ERF_META_TAG_ext_hdrs_removed:
+        tag_pi = dissect_meta_tag_ext_hdrs(section_tree, tvb, offset, taglength, tag_info, &tag_tree, &truncated_expert);
+        break;
 
       default:
         dissected = FALSE;
@@ -2802,6 +3280,7 @@ static void erf_init_dissection(void)
 {
   erf_state.implicit_host_id = 0;
   erf_state.source_map = wmem_map_new(wmem_file_scope(), wmem_int64_hash, g_int64_equal);
+  erf_state.host_anchor_map = wmem_map_new(wmem_file_scope(), erf_anchor_key_hash, erf_anchor_key_equal);
   /* Old map is freed automatically */
 }
 
@@ -2984,6 +3463,31 @@ proto_register_erf(void)
       { "Host ID", "erf.ehdr.hostid.hostid",
         FT_UINT48, BASE_HEX, NULL, 0, NULL, HFILL } },
 
+    /* Anchor ID Extension Header */
+    { &hf_erf_ehdr_anchor_id_flags,
+     { "Flags", "erf.ehdr.anchorid.flags",
+        FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL} },
+    { &hf_erf_ehdr_anchor_id_definition,
+     { "Anchor Definition", "erf.ehdr.anchorid.flags.definition",
+        FT_BOOLEAN, 8 /*bits in bitfield*/, NULL, 0x80, NULL, HFILL} },
+    { &hf_erf_ehdr_anchor_id_reserved,
+     { "Reserved", "erf.ehdr.anchorid.flags.rsvd",
+        FT_UINT8, BASE_HEX, NULL, 0x7f, NULL, HFILL} },
+    { &hf_erf_ehdr_anchor_id_anchorid,
+     { "Anchor ID", "erf.ehdr.anchorid.anchorid",
+        FT_UINT48, BASE_HEX, NULL, 0, NULL, HFILL} },
+
+    /* Generated fields for navigating Host ID/Anchor ID */
+    { &hf_erf_anchor_linked,
+      {"Linked Frame", "erf.anchor.frame",
+        FT_FRAMENUM, BASE_NONE, NULL, 0, NULL, HFILL} },
+    { &hf_erf_anchor_anchorid,
+      { "Anchor ID", "erf.anchor.anchorid",
+        FT_UINT48, BASE_HEX, NULL, 0, NULL, HFILL } },
+    { &hf_erf_anchor_hostid,
+      { "Host ID", "erf.anchor.hostid",
+        FT_UINT48, BASE_HEX, NULL, 0, NULL, HFILL } },
+
     /* Generated fields for navigating Host ID/Source ID */
     { &hf_erf_sourceid,
       { "Source ID", "erf.sourceid",
@@ -3000,6 +3504,17 @@ proto_register_erf(void)
     { &hf_erf_source_prev,
       { "Previous Metadata in Source", "erf.source_meta_frame_prev",
         FT_FRAMENUM, BASE_NONE, NULL, 0, NULL, HFILL } },
+
+    /* Entropy Extension Header */
+    { &hf_erf_ehdr_entropy_entropy,
+     { "Entropy", "erf.ehdr.entropy.entropy",
+        FT_FLOAT, BASE_NONE, NULL, 0, NULL, HFILL} },
+    { &hf_erf_ehdr_entropy_entropy_raw,
+     { "Raw Entropy", "erf.ehdr.entropy.entropy.raw",
+        FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL} },
+    { &hf_erf_ehdr_entropy_reserved,
+     { "Reserved", "erf.ehdr.entropy.rsvd",
+        FT_UINT48, BASE_HEX, NULL, 0, NULL, HFILL} },
 
     /* Unknown Extension Header */
     { &hf_erf_ehdr_unk,
@@ -3229,7 +3744,7 @@ proto_register_erf(void)
       { "Padding", "erf.eth.pad",
         FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL } },
 
-    /* MetaERF record unknown tags */
+    /* Provenance record unknown tags */
     { &hf_erf_meta_tag_type,
       { "Tag Type", "erf.meta.tag.type",
         FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL } },
@@ -3256,7 +3771,10 @@ proto_register_erf(void)
     &ett_erf_eth,
     &ett_erf_meta,
     &ett_erf_meta_tag,
-    &ett_erf_source
+    &ett_erf_source,
+    &ett_erf_anchor,
+    &ett_erf_anchor_flags,
+    &ett_erf_entropy_value
   };
 
   static const enum_val_t erf_hdlc_options[] = {
@@ -3279,11 +3797,11 @@ proto_register_erf(void)
       { &ei_erf_checksum_error, { "erf.checksum.error", PI_CHECKSUM, PI_ERROR, "ERF MC FCS Error", EXPFILL }},
       { &ei_erf_packet_loss, { "erf.packet_loss", PI_SEQUENCE, PI_WARN, "Packet loss occurred between previous and current packet", EXPFILL }},
       { &ei_erf_extension_headers_not_shown, { "erf.ehdr.more_not_shown", PI_SEQUENCE, PI_WARN, "More extension headers were present, not shown", EXPFILL }},
-      { &ei_erf_meta_section_len_error, { "erf.meta.section_len.error", PI_PROTOCOL, PI_ERROR, "MetaERF Section Length incorrect", EXPFILL }},
-      { &ei_erf_meta_truncated_record, { "erf.meta.truncated_record", PI_MALFORMED, PI_ERROR, "MetaERF truncated record", EXPFILL }},
-      { &ei_erf_meta_truncated_tag, { "erf.meta.truncated_tag", PI_PROTOCOL, PI_ERROR, "MetaERF truncated tag", EXPFILL }},
-      { &ei_erf_meta_zero_len_tag, { "erf.meta.zero_len_tag", PI_PROTOCOL, PI_NOTE, "MetaERF zero length tag", EXPFILL }},
-      { &ei_erf_meta_reset, { "erf.meta.metadata_reset", PI_PROTOCOL, PI_WARN, "MetaERF metadata reset", EXPFILL }}
+      { &ei_erf_meta_section_len_error, { "erf.meta.section_len.error", PI_PROTOCOL, PI_ERROR, "Provenance Section Length incorrect", EXPFILL }},
+      { &ei_erf_meta_truncated_record, { "erf.meta.truncated_record", PI_MALFORMED, PI_ERROR, "Provenance truncated record", EXPFILL }},
+      { &ei_erf_meta_truncated_tag, { "erf.meta.truncated_tag", PI_PROTOCOL, PI_ERROR, "Provenance truncated tag", EXPFILL }},
+      { &ei_erf_meta_zero_len_tag, { "erf.meta.zero_len_tag", PI_PROTOCOL, PI_NOTE, "Provenance zero length tag", EXPFILL }},
+      { &ei_erf_meta_reset, { "erf.meta.metadata_reset", PI_PROTOCOL, PI_WARN, "Provenance metadata reset", EXPFILL }}
   };
 
   module_t *erf_module;
@@ -3299,7 +3817,7 @@ proto_register_erf(void)
   expert_erf = expert_register_protocol(proto_erf);
   expert_register_field_array(expert_erf, ei, array_length(ei));
 
-  /* Register per-section MetaERF fields */
+  /* Register per-section Provenance fields */
   proto_register_field_array(proto_erf, (hf_register_info*) wmem_array_get_raw(erf_meta_index.hfri), (int) wmem_array_get_count(erf_meta_index.hfri));
   proto_register_subtree_array((gint**) wmem_array_get_raw(erf_meta_index.ett), (int) wmem_array_get_count(erf_meta_index.ett));
 
@@ -3336,7 +3854,7 @@ void
 proto_reg_handoff_erf(void)
 {
   dissector_add_uint("wtap_encap", WTAP_ENCAP_ERF, erf_handle);
-  /* Also register dissector for MetaERF non-packet records */
+  /* Also register dissector for Provenance non-packet records */
   dissector_add_uint("wtap_fts_rec", WTAP_FILE_TYPE_SUBTYPE_ERF, erf_handle);
 
   /* Get handles for serial line protocols */

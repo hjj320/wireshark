@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -33,19 +21,12 @@
 
 #include "snort-config.h"
 
-/* #define SNORT_CONFIG_DEBUG */
-#ifdef  SNORT_CONFIG_DEBUG
-#define snort_debug_printf printf
-#else
-#define snort_debug_printf(...)
-#endif
 
 #ifndef _WIN32
 const char* g_file_separator = "/";
 #else
 const char* g_file_separator = "\\";
 #endif
-
 
 /* Forward declaration */
 static void parse_config_file(SnortConfig_t *snort_config, FILE *config_file_fd, const char *filename, const char *dirname, int recursion_level);
@@ -73,7 +54,7 @@ static char *skipWhiteSpace(char *source, int *accumulated_offset)
  * - returns: requested string.  Returns from static buffer when copy is FALSE */
 static char* read_token(char* source, char delimeter, int *length, int *accumulated_length, gboolean copy)
 {
-    static char static_buffer[512];
+    static char static_buffer[1024];
     int offset = 0;
 
     char *source_proper = skipWhiteSpace(source, accumulated_length);
@@ -162,6 +143,14 @@ static void rule_set_content_fast_pattern(Rule_t *rule)
     }
 }
 
+/* Set the rawbytes property of a content field */
+static void rule_set_content_rawbytes(Rule_t *rule)
+{
+    if (rule->last_added_content) {
+        rule->last_added_content->rawbytes = TRUE;
+    }
+}
+
 /* Set the http_method property of a content field */
 static void rule_set_content_http_method(Rule_t *rule)
 {
@@ -183,6 +172,14 @@ static void rule_set_content_http_cookie(Rule_t *rule)
 {
     if (rule->last_added_content) {
         rule->last_added_content->http_cookie = TRUE;
+    }
+}
+
+/* Set the http_UserAgent property of a content field */
+static void rule_set_content_http_user_agent(Rule_t *rule)
+{
+    if (rule->last_added_content) {
+        rule->last_added_content->http_user_agent = TRUE;
     }
 }
 
@@ -304,12 +301,10 @@ void rule_set_relevant_vars(SnortConfig_t *snort_config, Rule_t *rule)
 
     /* Read source address */
     field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
-    snort_debug_printf("source address is (%s)\n", field);
     rule_check_ip_vars(snort_config, rule, field);
 
     /* Read source port */
     field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
-    snort_debug_printf("source port is (%s)\n", field);
     rule_check_port_vars(snort_config, rule, field);
 
     /* Read direction */
@@ -317,12 +312,10 @@ void rule_set_relevant_vars(SnortConfig_t *snort_config, Rule_t *rule)
 
     /* Dest address */
     field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
-    snort_debug_printf("dest address is (%s)\n", field);
     rule_check_ip_vars(snort_config, rule, field);
 
     /* Dest port */
     field = read_token(rule->rule_string+accumulated_length, ' ', &length, &accumulated_length, FALSE);
-    snort_debug_printf("dest port is (%s)\n", field);
     rule_check_port_vars(snort_config, rule, field);
 
     /* Set flag so won't do again for this rule */
@@ -537,28 +530,35 @@ static gboolean parse_include_file(SnortConfig_t *snort_config, char *line, cons
             /* Write rule path variable value */
             /* Don't assume $RULE_PATH will end in a file separator */
             if (snort_config->rule_path_is_absolute) {
+                /* Rule path is absolute, so it can go at start */
                 g_snprintf(substituted_filename, 512, "%s%s%s",
                            snort_config->rule_path,
                            g_file_separator,
-                           include_filename + 10);
+                           include_filename + 11);
             }
             else {
+                /* Rule path is relative to config directory, so it goes first */
                 g_snprintf(substituted_filename, 512, "%s%s%s%s%s",
                            config_directory,
                            g_file_separator,
                            snort_config->rule_path,
                            g_file_separator,
-                           include_filename + 10);
+                           include_filename + 11);
             }
             is_rule_file = TRUE;
         }
         else {
             /* No $RULE_PATH, just use directory and filename */
-            g_snprintf(substituted_filename, 512, "%s/%s", config_directory, include_filename);
+            /* But may not even need directory if included_folder is absolute! */
+            if (!g_path_is_absolute(include_filename)) {
+                g_snprintf(substituted_filename, 512, "%s/%s", config_directory, include_filename);
+            }
+            else {
+                g_strlcpy(substituted_filename, include_filename, 512);
+            }
         }
 
         /* Try to open the file. */
-        snort_debug_printf("Trying to open: %s\n", substituted_filename);
         new_config_fd = ws_fopen(substituted_filename, "r");
         if (new_config_fd == NULL) {
             snort_debug_printf("Failed to open config file %s\n", substituted_filename);
@@ -587,16 +587,20 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
     value[0] = '\0';
     gint value_length = 0;
     guint32 value32 = 0;
+    gint spaces_after_colon = 0;
 
     if (colon_offset != 0) {
         /* Name and value */
-        g_snprintf(name, colon_offset-option_start_offset, "%s", options+option_start_offset);
-        g_snprintf(value, options_end_offset-colon_offset, "%s", options+colon_offset);
+        g_strlcpy(name, options+option_start_offset, colon_offset-option_start_offset);
+        if (options[colon_offset] == ' ') {
+            spaces_after_colon = 1;
+        }
+        g_strlcpy(value, options+colon_offset+spaces_after_colon, options_end_offset-spaces_after_colon-colon_offset);
         value_length = (gint)strlen(value);
     }
     else {
         /* Just name */
-        g_snprintf(name, options_end_offset-option_start_offset, "%s", options+option_start_offset);
+        g_strlcpy(name, options+option_start_offset, options_end_offset-option_start_offset);
     }
 
     /* Do this extraction in one place (may not be number but should be OK) */
@@ -633,7 +637,7 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
             }
         }
 
-        value[options_end_offset-colon_offset-2] = '\0';
+        value[options_end_offset-colon_offset-spaces_after_colon-2] = '\0';
         rule_add_content(rule, value+value_start+1, value_start == 1);
     }
     else if (strcmp(name, "uricontent") == 0) {
@@ -651,7 +655,7 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
             }
         }
 
-        value[options_end_offset-colon_offset-2] = '\0';
+        value[options_end_offset-colon_offset-spaces_after_colon-2] = '\0';
         rule_add_uricontent(rule, value+value_start+1, value_start == 1);
     }
     else if (strcmp(name, "http_uri") == 0) {
@@ -667,7 +671,7 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
 
         /* Not expecting negation (!)... */
 
-        value[options_end_offset-colon_offset-2] = '\0';
+        value[options_end_offset-colon_offset-spaces_after_colon-2] = '\0';
         rule_add_pcre(rule, value+value_start+1);
     }
     else if (strcmp(name, "nocase") == 0) {
@@ -696,6 +700,12 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
     }
     else if (strcmp(name, "http_cookie") == 0) {
         rule_set_content_http_cookie(rule);
+    }
+    else if (strcmp(name, "http_user_agent") == 0) {
+        rule_set_content_http_user_agent(rule);
+    }
+    else if (strcmp(name, "rawbytes") == 0) {
+        rule_set_content_rawbytes(rule);
     }
     else if (strcmp(name, "classtype") == 0) {
         rule_set_classtype(rule, value);
@@ -788,6 +798,7 @@ static gboolean parse_rule(SnortConfig_t *snort_config, char *line, const char *
 
     /* Add rule to map of rules. */
     g_hash_table_insert(snort_config->rules, GUINT_TO_POINTER((guint)rule->sid), rule);
+    snort_debug_printf("Snort rule with SID=%u added to table\n", rule->sid);
 
     return TRUE;
 }
@@ -799,8 +810,6 @@ static gboolean delete_rule(gpointer  key _U_,
 {
     Rule_t *rule = (Rule_t*)value;
     unsigned int n;
-
-    snort_debug_printf("delete_rule(value=%p)\n", value);
 
     /* Delete strings on heap. */
     g_free(rule->rule_string);
@@ -1126,6 +1135,12 @@ gboolean content_convert_pcre_for_regex(content_t *content)
     /* Start with content->str */
     if (pcre_length < 3) {
         /* Can't be valid.  Expect /regex/[modifiers] */
+        return FALSE;
+    }
+
+    if (pcre_length >= 512) {
+        /* Have seen regex library crash on very long expressions
+         * (830 bytes) as seen in SID=2019326, REV=6 */
         return FALSE;
     }
 

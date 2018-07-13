@@ -15,19 +15,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * References: ETSI 300 374
  */
 
@@ -137,7 +125,7 @@ static int hf_tcap_AARQ_protocol_version_version1 = -1;
 static int hf_tcap_AARE_protocol_version_version1 = -1;
 
 /*--- End of included file: packet-tcap-hf.c ---*/
-#line 61 "./asn1/tcap/packet-tcap-template.c"
+#line 49 "./asn1/tcap/packet-tcap-template.c"
 
 /* Initialize the subtree pointers */
 static gint ett_tcap = -1;
@@ -193,7 +181,7 @@ static gint ett_tcap_ABRT_user_information = -1;
 static gint ett_tcap_Associate_source_diagnostic = -1;
 
 /*--- End of included file: packet-tcap-ett.c ---*/
-#line 79 "./asn1/tcap/packet-tcap-template.c"
+#line 67 "./asn1/tcap/packet-tcap-template.c"
 
 /* When several Tcap components are received in a single TCAP message,
    we have to use several buffers for the stored parameters
@@ -767,7 +755,7 @@ dissect_tcap_OrigTransactionID(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
                                       hf_index, BER_CLASS_APP, 8, TRUE, dissect_tcap_OCTET_STRING_SIZE_1_4);
 
-  PROTO_ITEM_SET_HIDDEN(actx->created_item);
+  PROTO_ITEM_SET_GENERATED(actx->created_item);
   offset = saved_offset;
 
   subtree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_otid, NULL, "Source Transaction ID");
@@ -782,6 +770,9 @@ dissect_tcap_OrigTransactionID(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int
       break;
     case 2:
       gp_tcapsrt_info->src_tid=tvb_get_ntohs(parameter_tvb, 0);
+      break;
+    case 3:
+      gp_tcapsrt_info->src_tid=tvb_get_ntoh24(parameter_tvb, 0);
       break;
     case 4:
       gp_tcapsrt_info->src_tid=tvb_get_ntohl(parameter_tvb, 0);
@@ -816,7 +807,7 @@ static const ber_sequence_t Begin_sequence[] = {
 
 static int
 dissect_tcap_Begin(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 222 "./asn1/tcap/tcap.cnf"
+#line 228 "./asn1/tcap/tcap.cnf"
 gp_tcapsrt_info->ope=TC_BEGIN;
 
 /*  Do not change col_add_str() to col_append_str() here: we _want_ this call
@@ -838,7 +829,7 @@ gp_tcapsrt_info->ope=TC_BEGIN;
 
 static int
 dissect_tcap_DestTransactionID(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 179 "./asn1/tcap/tcap.cnf"
+#line 182 "./asn1/tcap/tcap.cnf"
   tvbuff_t *parameter_tvb;
   guint8 len , i;
   proto_tree *subtree;
@@ -850,7 +841,7 @@ dissect_tcap_DestTransactionID(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
                                       hf_index, BER_CLASS_APP, 9, TRUE, dissect_tcap_OCTET_STRING_SIZE_1_4);
 
-  PROTO_ITEM_SET_HIDDEN(actx->created_item);
+  PROTO_ITEM_SET_GENERATED(actx->created_item);
   offset = saved_offset;
 
   subtree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_dtid, NULL, "Destination Transaction ID");
@@ -865,6 +856,9 @@ dissect_tcap_DestTransactionID(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int
       break;
     case 2:
       gp_tcapsrt_info->dst_tid=tvb_get_ntohs(parameter_tvb, 0);
+      break;
+    case 3:
+      gp_tcapsrt_info->dst_tid=tvb_get_ntoh24(parameter_tvb, 0);
       break;
     case 4:
       gp_tcapsrt_info->dst_tid=tvb_get_ntohl(parameter_tvb, 0);
@@ -898,7 +892,7 @@ static const ber_sequence_t End_sequence[] = {
 
 static int
 dissect_tcap_End(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 236 "./asn1/tcap/tcap.cnf"
+#line 242 "./asn1/tcap/tcap.cnf"
 gp_tcapsrt_info->ope=TC_END;
 
   col_set_str(actx->pinfo->cinfo, COL_INFO, "End ");
@@ -920,7 +914,7 @@ static const ber_sequence_t Continue_sequence[] = {
 
 static int
 dissect_tcap_Continue(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 243 "./asn1/tcap/tcap.cnf"
+#line 249 "./asn1/tcap/tcap.cnf"
 gp_tcapsrt_info->ope=TC_CONT;
 
   col_set_str(actx->pinfo->cinfo, COL_INFO, "Continue ");
@@ -991,7 +985,7 @@ static const ber_sequence_t Abort_sequence[] = {
 
 static int
 dissect_tcap_Abort(gboolean implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 250 "./asn1/tcap/tcap.cnf"
+#line 256 "./asn1/tcap/tcap.cnf"
 gp_tcapsrt_info->ope=TC_ABORT;
 
   col_set_str(actx->pinfo->cinfo, COL_INFO, "Abort ");
@@ -1428,7 +1422,7 @@ static int dissect_DialoguePDU_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, pr
 
 
 /*--- End of included file: packet-tcap-fn.c ---*/
-#line 155 "./asn1/tcap/packet-tcap-template.c"
+#line 143 "./asn1/tcap/packet-tcap-template.c"
 
 /*
  * DEBUG functions
@@ -1537,7 +1531,9 @@ tcaphash_end_equal(gconstpointer k1, gconstpointer k2)
   const struct tcaphash_end_info_key_t *key2 = (const struct tcaphash_end_info_key_t *) k2;
 
   if (key1->hashKey == key2->hashKey) {
-    if ( (key1->pc_hash == key2->pc_hash) && (key1->tid == key2->tid) )
+    if ( (key1->opc_hash == key2->opc_hash) &&
+         (key1->dpc_hash == key2->dpc_hash) &&
+         (key1->tid == key2->tid) )
       return TRUE;
   }
   return FALSE;
@@ -1994,7 +1990,8 @@ new_tcaphash_end(struct tcaphash_end_info_key_t *p_tcaphash_end_key,
   p_new_tcaphash_end_key = wmem_new(wmem_file_scope(), struct tcaphash_end_info_key_t);
   p_new_tcaphash_end_key->hashKey = p_tcaphash_end_key->hashKey;
   p_new_tcaphash_end_key->tid = p_tcaphash_end_key->tid;
-  p_new_tcaphash_end_key->pc_hash = p_tcaphash_end_key->pc_hash;
+  p_new_tcaphash_end_key->opc_hash = p_tcaphash_end_key->opc_hash;
+  p_new_tcaphash_end_key->dpc_hash = p_tcaphash_end_key->dpc_hash;
 
   p_new_tcaphash_endcall = wmem_new0(wmem_file_scope(), struct tcaphash_endcall_t);
   p_new_tcaphash_endcall->endkey=p_new_tcaphash_end_key;
@@ -2313,6 +2310,7 @@ tcaphash_cont_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   proto_item *pi;
   proto_item *stat_item=NULL;
   proto_tree *stat_tree=NULL;
+  gboolean use_dst = FALSE;
 
 #ifdef DEBUG_TCAPSRT
   dbg(51,"src %s srcTid %lx dst %s dstTid %lx ", address_to_str(wmem_packet_scope(), &pinfo->src), p_tcapsrt_info->src_tid, address_to_str(wmem_packet_scope(), &pinfo->dst), p_tcapsrt_info->dst_tid);
@@ -2368,11 +2366,13 @@ tcaphash_cont_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 #endif
     p_tcaphash_begincall = find_tcaphash_begin(&tcaphash_begin_key, pinfo, FALSE);
     if(!p_tcaphash_begincall){
+      try_src:
 /* can this actually happen? */
 #ifdef DEBUG_TCAPSRT
         dbg(12,"BNotFound trying stid,src");
 #endif
         /* Do we have a continue from the same source? (stid,src) */
+        use_dst = TRUE;
         tcaphash_begin_key.tid = p_tcapsrt_info->src_tid;
         if (pinfo->src.type == ss7pc_address_type && pinfo->dst.type == ss7pc_address_type)
         {
@@ -2405,21 +2405,23 @@ tcaphash_cont_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       create_tcaphash_cont(&tcaphash_cont_key,
                            p_tcaphash_begincall->context);
 
-      /* Create END for (stid,src) */
-      tcaphash_end_key.tid = p_tcapsrt_info->src_tid;
+      /* Create END for (stid,src) or (dtid,dst) */
+      tcaphash_end_key.tid = use_dst ? p_tcapsrt_info->dst_tid : p_tcapsrt_info->src_tid;
       if (pinfo->src.type == ss7pc_address_type && pinfo->dst.type == ss7pc_address_type)
       {
         /* We have MTP3 PCs (so we can safely do this cast) */
-        tcaphash_end_key.pc_hash = mtp3_pc_hash((const mtp3_addr_pc_t *)pinfo->src.data);
-      } else {
+        tcaphash_end_key.dpc_hash = mtp3_pc_hash((const mtp3_addr_pc_t *)(use_dst ? pinfo->dst.data : pinfo->src.data));
+        tcaphash_end_key.opc_hash = mtp3_pc_hash((const mtp3_addr_pc_t *)(use_dst ? pinfo->src.data : pinfo->dst.data));
+    } else {
         /* Don't have MTP3 PCs (have SCCP GT ?) */
-        tcaphash_end_key.pc_hash = g_str_hash(address_to_str(wmem_packet_scope(), &pinfo->src));
-      }
+        tcaphash_end_key.dpc_hash = g_str_hash(address_to_str(wmem_packet_scope(), use_dst ? &pinfo->dst : &pinfo->src));
+        tcaphash_end_key.opc_hash = g_str_hash(address_to_str(wmem_packet_scope(), use_dst ? &pinfo->src : &pinfo->dst));
+    }
       tcaphash_end_key.hashKey=tcaphash_end_calchash(&tcaphash_end_key);
 
 #ifdef DEBUG_TCAPSRT
       dbg(10,"New Ekey %lx ",tcaphash_end_key.hashKey);
-      dbg(51,"addr %s ", address_to_str(wmem_packet_scope(), &pinfo->src));
+      dbg(51,"addr %s ", address_to_str(wmem_packet_scope(), use_dst ? &pinfo->dst : &pinfo->src));
       dbg(51,"Tid %lx ",tcaphash_end_key.tid);
       dbg(11,"Frame reqlink #%u ", pinfo->num);
 #endif
@@ -2430,6 +2432,10 @@ tcaphash_cont_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 #ifdef DEBUG_TCAPSRT
       dbg(12,"BnotFound ");
 #endif
+      if (!use_dst) {
+        /* make another try with src tid / address */
+        goto try_src;
+      }
     } /* begin found */
   } /* cont found */
     /* display tcap session, if available */
@@ -2481,11 +2487,13 @@ tcaphash_end_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   if (pinfo->src.type == ss7pc_address_type && pinfo->dst.type == ss7pc_address_type)
   {
     /* We have MTP3 PCs (so we can safely do this cast) */
-    tcaphash_end_key.pc_hash = mtp3_pc_hash((const mtp3_addr_pc_t *)pinfo->dst.data);
+    tcaphash_end_key.opc_hash = mtp3_pc_hash((const mtp3_addr_pc_t *)pinfo->src.data);
+    tcaphash_end_key.dpc_hash = mtp3_pc_hash((const mtp3_addr_pc_t *)pinfo->dst.data);
   } else {
     /* Don't have MTP3 PCs (have SCCP GT ?) */
-    tcaphash_end_key.pc_hash = g_str_hash(address_to_str(wmem_packet_scope(), &pinfo->dst));
-  }
+    tcaphash_end_key.opc_hash = g_str_hash(address_to_str(wmem_packet_scope(), &pinfo->src));
+    tcaphash_end_key.dpc_hash = g_str_hash(address_to_str(wmem_packet_scope(), &pinfo->dst));
+}
   tcaphash_end_key.hashKey=tcaphash_end_calchash(&tcaphash_end_key);
 
 #ifdef DEBUG_TCAPSRT
@@ -3200,7 +3208,7 @@ proto_reg_handoff_tcap(void)
 
 
 /*--- End of included file: packet-tcap-dis-tab.c ---*/
-#line 1919 "./asn1/tcap/packet-tcap-template.c"
+#line 1921 "./asn1/tcap/packet-tcap-template.c"
 }
 
 static void init_tcap(void);
@@ -3542,7 +3550,7 @@ proto_register_tcap(void)
         NULL, HFILL }},
 
 /*--- End of included file: packet-tcap-hfarr.c ---*/
-#line 1992 "./asn1/tcap/packet-tcap-template.c"
+#line 1994 "./asn1/tcap/packet-tcap-template.c"
   };
 
 /* Setup protocol subtree array */
@@ -3590,7 +3598,7 @@ proto_register_tcap(void)
     &ett_tcap_Associate_source_diagnostic,
 
 /*--- End of included file: packet-tcap-ettarr.c ---*/
-#line 2002 "./asn1/tcap/packet-tcap-template.c"
+#line 2004 "./asn1/tcap/packet-tcap-template.c"
   };
 
   /*static enum_val_t tcap_options[] = {
@@ -3673,14 +3681,14 @@ proto_register_tcap(void)
 }
 
 
-static void range_delete_callback(guint32 ssn)
+static void range_delete_callback(guint32 ssn, gpointer ptr _U_)
 {
   if ( ssn && !get_ansi_tcap_subdissector(ssn) && !get_itu_tcap_subdissector(ssn) ) {
     dissector_delete_uint("sccp.ssn", ssn, tcap_handle);
   }
 }
 
-static void range_add_callback(guint32 ssn)
+static void range_add_callback(guint32 ssn, gpointer ptr _U_)
 {
   if (ssn && !get_ansi_tcap_subdissector(ssn) && !get_itu_tcap_subdissector(ssn) ) {
     dissector_add_uint("sccp.ssn", ssn, tcap_handle);
@@ -3691,7 +3699,7 @@ static void range_add_callback(guint32 ssn)
 static void init_tcap(void)
 {
   ssn_range = range_copy(wmem_epan_scope(), global_ssn_range);
-  range_foreach(ssn_range, range_add_callback);
+  range_foreach(ssn_range, range_add_callback, NULL);
 
   /* Reset the session counter */
   tcapsrt_global_SessionId=1;
@@ -3702,7 +3710,7 @@ static void init_tcap(void)
 
 static void cleanup_tcap(void)
 {
-  range_foreach(ssn_range, range_delete_callback);
+  range_foreach(ssn_range, range_delete_callback, NULL);
   wmem_free(wmem_epan_scope(), ssn_range);
 }
 

@@ -9,19 +9,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * BFCP Message structure is defined in RFC 4582bis
  */
@@ -205,9 +193,13 @@ dissect_bfcp_attributes(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int
 
 		item = proto_tree_add_item(bfcp_attr_tree, hf_bfcp_attribute_length, tvb, offset, 1, ENC_BIG_ENDIAN);
 		length = tvb_get_guint8(tvb, offset);
+		/* At least Type, M bit and Length fields */
+		if (length < 2){
+			expert_add_info_format(pinfo, item, &ei_bfcp_attribute_length_too_small,
+					       "Attribute length is too small (%d bytes - minimum valid is 2)", length);
+			break;
+		}
 		offset++;
-
-		pad_len = 0; /* Default to no padding*/
 
 		switch(attribute_type){
 		case 1: /* Beneficiary ID */
@@ -372,12 +364,8 @@ dissect_bfcp_attributes(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int
 
 		default:
 			proto_tree_add_item(bfcp_attr_tree, hf_bfcp_payload, tvb, offset, length-2, ENC_NA);
+			/* Advance by any length attributable to payload */
 			offset = offset + length - 2;
-			break;
-		}
-		if ((length+pad_len) < (offset - attr_start_offset)){
-			expert_add_info_format(pinfo, item, &ei_bfcp_attribute_length_too_small,
-							"Attribute length is too small (%d bytes)", length);
 			break;
 		}
 		read_attr = read_attr + length;

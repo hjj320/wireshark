@@ -16,9 +16,9 @@ libwiretap.so.0 libwiretap0 #MINVER#
  merge_string_to_idb_merge_mode@Base 1.99.9
  open_info_name_to_type@Base 1.12.0~rc1
  open_routines@Base 1.12.0~rc1
- register_all_wiretap_modules@Base 1.12.0~rc1
  register_pcapng_block_type_handler@Base 1.99.0
  register_pcapng_option_handler@Base 1.99.2
+ wtap_addrinfo_list_empty@Base 2.5.0
  wtap_block_add_custom_option@Base 2.1.2
  wtap_block_add_ipv4_option@Base 2.1.2
  wtap_block_add_ipv6_option@Base 2.1.2
@@ -49,7 +49,6 @@ libwiretap.so.0 libwiretap0 #MINVER#
  wtap_block_set_string_option_value_format@Base 2.1.2
  wtap_block_set_uint64_option_value@Base 2.1.2
  wtap_block_set_uint8_option_value@Base 2.1.2
- wtap_buf_ptr@Base 1.9.1
  wtap_cleareof@Base 1.9.1
  wtap_close@Base 1.9.1
  wtap_default_file_extension@Base 1.9.1
@@ -67,6 +66,7 @@ libwiretap.so.0 libwiretap0 #MINVER#
  wtap_dump_file_tell@Base 1.12.0~rc1
  wtap_dump_file_write@Base 1.12.0~rc1
  wtap_dump_flush@Base 1.9.1
+ wtap_dump_get_needs_reload@Base 2.5.0
  wtap_dump_has_name_resolution@Base 1.9.1
  wtap_dump_open@Base 1.9.1
  wtap_dump_open_ng@Base 1.9.1
@@ -96,6 +96,7 @@ libwiretap.so.0 libwiretap0 #MINVER#
  wtap_free_idb_info@Base 1.99.9
  wtap_fstat@Base 1.9.1
  wtap_get_all_capture_file_extensions_list@Base 2.3.0
+ wtap_get_buf_ptr@Base 2.5.1
  wtap_get_bytes_dumped@Base 1.9.1
  wtap_get_debug_if_descr@Base 1.99.9
  wtap_get_file_extension_type_extensions@Base 1.12.0~rc1
@@ -104,6 +105,7 @@ libwiretap.so.0 libwiretap0 #MINVER#
  wtap_get_num_encap_types@Base 1.9.1
  wtap_get_num_file_type_extensions@Base 1.12.0~rc1
  wtap_get_num_file_types_subtypes@Base 1.12.0~rc1
+ wtap_get_rec@Base 2.5.1
  wtap_get_savable_file_types_subtypes@Base 1.12.0~rc1
  wtap_has_open_info@Base 1.12.0~rc1
  wtap_init@Base 2.3.0
@@ -114,18 +116,18 @@ libwiretap.so.0 libwiretap0 #MINVER#
  wtap_opttypes_initialize@Base 2.1.2
  wtap_opttypes_cleanup@Base 2.3.0
  wtap_pcap_encap_to_wtap_encap@Base 1.9.1
- wtap_phdr@Base 1.9.1
- wtap_phdr_cleanup@Base 1.99.2
- wtap_phdr_init@Base 1.99.2
  wtap_read@Base 1.9.1
  wtap_read_bytes@Base 1.99.1
  wtap_read_bytes_or_eof@Base 1.99.1
  wtap_read_packet_bytes@Base 1.12.0~rc1
  wtap_read_so_far@Base 1.9.1
+ wtap_rec_cleanup@Base 2.5.1
+ wtap_rec_init@Base 2.5.1
  wtap_register_encap_type@Base 1.9.1
  wtap_register_file_type_extension@Base 1.12.0~rc1
  wtap_register_file_type_subtypes@Base 1.12.0~rc1
  wtap_register_open_info@Base 1.12.0~rc1
+ wtap_register_plugin@Base 2.5.0
  wtap_seek_read@Base 1.9.1
  wtap_sequential_close@Base 1.9.1
  wtap_set_bytes_dumped@Base 1.9.1

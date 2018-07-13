@@ -7,19 +7,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -3041,12 +3029,13 @@ static const value_string str_vta_type[] = {
 
 static const value_string str_additional_vta_type[] = {
     {0x00, "Not Applicable"},
-    {0x30, "4018"},
-    {0x31, "4028S"},
+    {0x30, "8018"},
+    {0x31, "8028S"},
     {0x32, "8058S"},
     {0x33, "4068S"},
     {0x34, "8078S"},
     {0x35, "8088"},
+    {0x36, "8008"},
     {0, NULL}
 };
 

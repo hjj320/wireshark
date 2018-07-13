@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #ifndef INTERFACE_TOOLBAR_H
@@ -45,8 +33,8 @@ struct interface_values
     QMap<int, QByteArray> value;
     QMap<int, bool> value_changed;
     QMap<int, QList<QByteArray> > list;
-    FunnelTextDialog *log_dialog;
-    QString log_text;
+    QMap<int, FunnelTextDialog *> log_dialog;
+    QMap<int, QString> log_text;
     QMap<int, bool> widget_disabled;
 };
 
@@ -70,7 +58,7 @@ signals:
     void closeReader();
 
 private slots:
-    void startReaderThread(QString ifname, QString control_in);
+    void startReaderThread(QString ifname, void *control_in);
     void updateWidgets();
 
     void onControlButtonPressed();

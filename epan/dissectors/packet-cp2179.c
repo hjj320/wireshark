@@ -9,19 +9,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  ************************************************************************************************
 CP2179 protocol is a serial based protocol. The 2179 protocol is implemented with minor variations between vendors.
@@ -616,7 +604,7 @@ dissect_bs_response_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, i
                     /*Report the values of the requested SCAN inclusive data. To figure out which sequence ID the values in the response associated with,
                     we read the bs_request_frame information and show the corresponding sequence ID of the data in response frame.*/
                     do{
-                        analogtestvalue = (gint16)tvb_get_letohs(tvb, offset);
+                        analogtestvalue = tvb_get_letohis(tvb, offset);
                         proto_tree_add_uint_format(cp2179_data_tree, hf_cp2179_analog_16bit, tvb, offset, 2, request_data->requested_points[point_num],
                                                    "Analog (16 bit) %u : %i",  request_data->requested_points[point_num], analogtestvalue);
                         point_num += 1;
@@ -650,7 +638,7 @@ dissect_bs_response_frame(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, i
 
                         case ANALOG_16_BIT:
                             do{
-                                analogtestvalue =(gint16)tvb_get_letohs(tvb, offset);
+                                analogtestvalue = tvb_get_letohis(tvb, offset);
                                 proto_tree_add_uint_format(cp2179_data_tree, hf_cp2179_analog_16bit, tvb, offset, 2, analog16_num,
                                                            "Analog (16 bit) %u : %i", analog16_num, analogtestvalue);
                                 analog16_num += 1;

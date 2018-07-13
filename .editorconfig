@@ -15,8 +15,8 @@ charset = utf-8
 trim_trailing_whitespace = true
 insert_final_newline = true
 
-# Autotools, Make
-[{Makefile.am,Makefile}]
+# Makefiles. Although we dropped Autotools we still have a few lying around.
+[Makefile*]
 indent_style = tab
 indent_size = 8
 
@@ -24,6 +24,11 @@ indent_size = 8
 [*.py]
 indent_style = space
 indent_size = 4
+
+# WiX. The `xmllint --format` default is two spaces.
+[*.wx?]
+indent_style = spaces
+indent_size = 2
 
 # C/C++
 [*.{c,cpp,h}]
@@ -80,6 +85,6 @@ indent_size = tab
 indent_style = tab
 indent_size = tab
 
-[ws_version_info.[ch]]
+[version_info.[ch]]
 indent_style = tab
 indent_size = tab

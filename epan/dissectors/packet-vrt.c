@@ -10,29 +10,20 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 
 #include "config.h"
 #include <epan/packet.h>
+#include <epan/prefs.h>
 
 void proto_register_vrt(void);
 void proto_reg_handoff_vrt(void);
 
 #define VITA_49_PORT    4991
+
+static gboolean vrt_use_ettus_uhd_header_format = FALSE;
 
 static int proto_vrt = -1;
 
@@ -168,7 +159,7 @@ static int dissect_vrt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     col_clear(pinfo->cinfo,COL_INFO);
 
     /* HACK to support UHD's weird header offset on data packets. */
-    if (tvb_get_guint8(tvb, 0) == 0)
+    if (vrt_use_ettus_uhd_header_format && tvb_get_guint8(tvb, 0) == 0)
         offset += 4;
 
     /* get packet type */
@@ -339,6 +330,8 @@ static void dissect_cid(tvbuff_t *tvb, proto_tree *tree, int offset)
 void
 proto_register_vrt(void)
 {
+    module_t *vrt_module;
+
     static hf_register_info hf[] = {
         { &hf_vrt_header,
             { "VRT header", "vrt.hdr",
@@ -637,6 +630,12 @@ proto_register_vrt(void)
 
     proto_register_field_array(proto_vrt, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
+
+    vrt_module = prefs_register_protocol(proto_vrt, NULL);
+    prefs_register_bool_preference(vrt_module, "ettus_uhd_header_format",
+        "Use Ettus UHD header format",
+        "Activate workaround for weird Ettus UHD header offset on data packets",
+        &vrt_use_ettus_uhd_header_format);
 }
 
 void

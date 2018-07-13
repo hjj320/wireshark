@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -405,7 +393,7 @@ dissect_distributed_sak(proto_tree *mka_tree, packet_info *pinfo, tvbuff_t *tvb,
 
     proto_tree_add_item(distributed_sak_tree, hf_mka_aes_key_wrap_sak,
                         tvb, offset, distributed_sak_len - 12, ENC_NA);
-    offset += (distributed_sak_len + 12);
+    offset += (distributed_sak_len - 12);
   }
   else
   {
@@ -957,7 +945,7 @@ proto_register_mka(void)
 
     { &hf_mka_suspension_time, {
         "Suspension time", "mka.suspension_time",
-        FT_UINT8, BASE_DEC, NULL, 0xc0,
+        FT_UINT8, BASE_DEC, NULL, 0x0,
         NULL, HFILL }},
 
     { &hf_mka_icv, {

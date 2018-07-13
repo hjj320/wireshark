@@ -1,31 +1,19 @@
 /* packet-alcap.c
-* Routines for ALCAP (Q.2630.3) dissection
-* AAL type 2 signalling protocol - Capability set 3
-* 10/2003
-*
-* Copyright 2003, Michael Lum <mlum [AT] telostech.com>
-* In association with Telos Technology Inc.
-*
-* Copyright 2005, Luis E. Garcia Ontanon <luis.ontanon [AT] gmail.com>
-*
-* Wireshark - Network traffic analyzer
-* By Gerald Combs <gerald@wireshark.org>
-* Copyright 1998 Gerald Combs
-*
-* This program is free software; you can redistribute it and/or
-* modify it under the terms of the GNU General Public License
-* as published by the Free Software Foundation; either version 2
-* of the License, or (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program; if not, write to the Free Software
-* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-*/
+ * Routines for ALCAP (Q.2630.3) dissection
+ * AAL type 2 signalling protocol - Capability set 3
+ * 10/2003
+ *
+ * Copyright 2003, Michael Lum <mlum [AT] telostech.com>
+ * In association with Telos Technology Inc.
+ *
+ * Copyright 2005, Luis E. Garcia Ontanon <luis.ontanon [AT] gmail.com>
+ *
+ * Wireshark - Network traffic analyzer
+ * By Gerald Combs <gerald@wireshark.org>
+ * Copyright 1998 Gerald Combs
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 #include "config.h"
 

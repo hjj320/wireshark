@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR ADD PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -1421,6 +1409,7 @@ typedef struct _c_node {
 static
 void c_node_init(c_node *n)
 {
+	clear_address(&n->addr);
 	c_node_name_init(&n->name);
 	n->port = 0xFFFF;
 	n->state = C_STATE_NEW;
@@ -2366,7 +2355,7 @@ guint c_dissect_object_locator(proto_tree *root, gint hf,
 	off = c_dissect_encoded(tree, &enchdr, 3, 6, tvb, off, data);
 
 	proto_item_append_text(ti, ", Pool: %"G_GINT64_MODIFIER"d",
-			       (gint64)tvb_get_letoh64(tvb, off));
+			       tvb_get_letohi64(tvb, off));
 	proto_tree_add_item(tree, hf_pool, tvb, off, 8, ENC_LITTLE_ENDIAN);
 	off += 8;
 
@@ -6840,8 +6829,10 @@ guint c_dissect_msgr(proto_tree *tree,
 		*/
 
 		/* Batch multiple unknowns together. */
-		while (c_unknowntagnext(tvb, off))
-			off++, unknowntagcount++;
+		while (c_unknowntagnext(tvb, off)) {
+			off++;
+			unknowntagcount++;
+		}
 
 		c_set_type(data, wmem_strdup_printf(wmem_packet_scope(),
 						    "UNKNOWN x%u",

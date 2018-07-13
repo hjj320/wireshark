@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "iax2_analysis_dialog.h"
@@ -46,9 +34,9 @@
 #include <QPushButton>
 #include <QTemporaryFile>
 
-#include "color_utils.h"
-#include "qt_ui_utils.h"
-#include "stock_icon.h"
+#include <ui/qt/utils/color_utils.h>
+#include <ui/qt/utils/qt_ui_utils.h>
+#include <ui/qt/utils/stock_icon.h>
 #include "wireshark_application.h"
 
 /*
@@ -334,8 +322,9 @@ Iax2AnalysisDialog::Iax2AnalysisDialog(QWidget &parent, CaptureFile &cf) :
 
     epan_dissect_init(&edt, cap_file_.capFile()->epan, TRUE, FALSE);
     epan_dissect_prime_with_dfilter(&edt, sfcode);
-    epan_dissect_run(&edt, cap_file_.capFile()->cd_t, &cap_file_.capFile()->phdr,
-                     frame_tvbuff_new_buffer(fdata, &cap_file_.capFile()->buf), fdata, NULL);
+    epan_dissect_run(&edt, cap_file_.capFile()->cd_t, &cap_file_.capFile()->rec,
+                     frame_tvbuff_new_buffer(&cap_file_.capFile()->provider, fdata, &cap_file_.capFile()->buf),
+                     fdata, NULL);
 
     // This shouldn't happen (the menu item should be disabled) but check anyway
     if (!dfilter_apply_edt(sfcode, &edt)) {
@@ -408,8 +397,8 @@ Iax2AnalysisDialog::Iax2AnalysisDialog(QWidget &parent, CaptureFile &cf) :
             this, SLOT(updateWidgets()));
     connect(ui->reverseTreeWidget, SIGNAL(itemSelectionChanged()),
             this, SLOT(updateWidgets()));
-    connect(&cap_file_, SIGNAL(captureFileClosing()),
-            this, SLOT(updateWidgets()));
+    connect(&cap_file_, SIGNAL(captureEvent(CaptureEvent)),
+            this, SLOT(captureEvent(CaptureEvent)));
     updateWidgets();
 
     registerTapListener("IAX2", this, NULL, 0, tapReset, tapPacket, tapDraw);
@@ -425,6 +414,15 @@ Iax2AnalysisDialog::~Iax2AnalysisDialog()
 //    remove_tap_listener_rtp_stream(&tapinfo);
     delete fwd_tempfile_;
     delete rev_tempfile_;
+}
+
+void Iax2AnalysisDialog::captureEvent(CaptureEvent e)
+{
+    if ((e.captureContext() == CaptureEvent::File) &&
+            (e.eventType() == CaptureEvent::Closing))
+    {
+        updateWidgets();
+    }
 }
 
 void Iax2AnalysisDialog::updateWidgets()
@@ -1198,15 +1196,15 @@ void Iax2AnalysisDialog::saveCsv(Iax2AnalysisDialog::StreamDirection direction)
     if (direction == dir_reverse_ || direction == dir_both_) {
         save_file.write("Reverse\n");
 
-        for (int row = 0; row < ui->forwardTreeWidget->topLevelItemCount(); row++) {
-            QTreeWidgetItem *ti = ui->forwardTreeWidget->topLevelItem(row);
+        for (int row = 0; row < ui->reverseTreeWidget->topLevelItemCount(); row++) {
+            QTreeWidgetItem *ti = ui->reverseTreeWidget->topLevelItem(row);
             if (ti->type() != iax2_analysis_type_) continue;
             Iax2AnalysisTreeWidgetItem *ra_ti = dynamic_cast<Iax2AnalysisTreeWidgetItem *>((Iax2AnalysisTreeWidgetItem *)ti);
             QStringList values;
             foreach (QVariant v, ra_ti->rowData()) {
                 if (!v.isValid()) {
                     values << "\"\"";
-                } else if ((int) v.type() == (int) QMetaType::QString) {
+                } else if (v.type() == QVariant::String) {
                     values << QString("\"%1\"").arg(v.toString());
                 } else {
                     values << v.toString();

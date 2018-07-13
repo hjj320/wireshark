@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "rtp_audio_stream.h"
@@ -229,6 +217,12 @@ void RtpAudioStream::decode()
 
         size_t decoded_bytes = decode_rtp_packet(rtp_packet, &decode_buff, decoders_hash_, &channels, &sample_rate);
 
+        unsigned rtp_clock_rate = sample_rate;
+        if (rtp_packet->info->info_payload_type == PT_G722) {
+            // G.722 sample rate is 16kHz, but RTP clock rate is 8kHz for historic reasons.
+            rtp_clock_rate = 8000;
+        }
+
         if (decoded_bytes == 0 || sample_rate == 0) {
             // We didn't decode anything. Clean up and prep for the next packet.
             last_sequence = rtp_packet->info->info_seq_num;
@@ -236,7 +230,27 @@ void RtpAudioStream::decode()
             continue;
         }
 
-        if (audio_out_rate_ == 0) { // First non-zero wins
+        if (audio_out_rate_ == 0) {
+            // Use the first non-zero rate we find. Ajust it to match our audio hardware.
+            QAudioDeviceInfo cur_out_device = QAudioDeviceInfo::defaultOutputDevice();
+            QString cur_out_name = parent()->property("currentOutputDeviceName").toString();
+            foreach (QAudioDeviceInfo out_device, QAudioDeviceInfo::availableDevices(QAudio::AudioOutput)) {
+                if (cur_out_name == out_device.deviceName()) {
+                    cur_out_device = out_device;
+                }
+            }
+
+            QAudioFormat format;
+            format.setSampleRate(sample_rate);
+            format.setSampleSize(sample_bytes_ * 8); // bits
+            format.setSampleType(QAudioFormat::SignedInt);
+            format.setChannelCount(1);
+            format.setCodec("audio/pcm");
+
+            if (!cur_out_device.isFormatSupported(format)) {
+                sample_rate = cur_out_device.nearestFormat(format).sampleRate();
+            }
+
             audio_out_rate_ = sample_rate;
             RTP_STREAM_DEBUG("Audio sample rate is %u", audio_out_rate_);
 
@@ -252,12 +266,6 @@ void RtpAudioStream::decode()
             out_of_seq_timestamps_.append(stop_rel_time_);
         }
         last_sequence = rtp_packet->info->info_seq_num;
-
-        unsigned rtp_clock_rate = sample_rate;
-        if (rtp_packet->info->info_payload_type == PT_G722) {
-            // G.722 sample rate is 16kHz, but RTP clock rate is 8kHz for historic reasons.
-            rtp_clock_rate = 8000;
-        }
 
         double rtp_time = (double)(rtp_packet->info->info_timestamp-start_timestamp)/rtp_clock_rate - start_rtp_time;
         double arrive_time;

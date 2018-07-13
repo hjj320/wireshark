@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -271,6 +259,7 @@ tvb_composite_finalize(tvbuff_t *tvb)
 	DISSECTOR_ASSERT(tvb->ops == &tvb_composite_ops);
 	DISSECTOR_ASSERT(tvb->length == 0);
 	DISSECTOR_ASSERT(tvb->reported_length == 0);
+	DISSECTOR_ASSERT(tvb->contained_length == 0);
 
 	composite   = &composite_tvb->composite;
 	num_members = g_slist_length(composite->tvbs);
@@ -290,6 +279,7 @@ tvb_composite_finalize(tvbuff_t *tvb)
 		composite->start_offsets[i] = tvb->length;
 		tvb->length += member_tvb->length;
 		tvb->reported_length += member_tvb->reported_length;
+		tvb->contained_length += member_tvb->contained_length;
 		composite->end_offsets[i] = tvb->length - 1;
 		i++;
 	}

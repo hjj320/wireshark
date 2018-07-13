@@ -7,19 +7,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1999 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  * References:
  * ETSI TS 129 171 V9.2.0 (2010-10)
  */
@@ -53,9 +41,6 @@
 void proto_register_lcsap(void);
 void proto_reg_handoff_lcsap(void);
 
-static dissector_handle_t lpp_handle;
-static dissector_handle_t lppa_handle;
-
 #define SCTP_PORT_LCSAP 9082
 #include "packet-lcsap-val.h"
 
@@ -88,6 +73,8 @@ static guint gbl_lcsapSctpPort=SCTP_PORT_LCSAP;
 
 /* Dissector handles */
 static dissector_handle_t lcsap_handle;
+static dissector_handle_t lpp_handle;
+static dissector_handle_t lppa_handle;
 static dissector_handle_t xml_handle;
 
 /* Dissector tables */
@@ -250,6 +237,7 @@ proto_reg_handoff_lcsap(void)
   if (!Initialized) {
     lpp_handle = find_dissector_add_dependency("lpp", proto_lcsap);
     lppa_handle = find_dissector_add_dependency("lppa", proto_lcsap);
+    xml_handle = find_dissector_add_dependency("xml", proto_lcsap);
     dissector_add_for_decode_as("sctp.port", lcsap_handle);   /* for "decode-as"  */
     dissector_add_uint("sctp.ppi", LCS_AP_PAYLOAD_PROTOCOL_ID,   lcsap_handle);
     Initialized=TRUE;
@@ -346,9 +334,6 @@ void proto_register_lcsap(void) {
                                  "Set the SCTP port for LCSAP messages",
                                  10,
                                  &gbl_lcsapSctpPort);
-
-  xml_handle = find_dissector_add_dependency("xml", proto_lcsap);
-
 }
 
 /*

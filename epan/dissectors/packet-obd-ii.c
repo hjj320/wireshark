@@ -7,19 +7,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -652,7 +640,7 @@ dissect_obdii_mode_01(tvbuff_t *tvb, struct obdii_packet_info *oinfo, proto_tree
 				memset(bits_str, '.', 32);
 				bits_str[32] = '\0';
 
-				if ((val & (1 << i)))
+				if ((val & (1U << i)))
 				{
 					col_append_fstr(oinfo->pinfo->cinfo, COL_INFO, "%s%.2X", sepa, this_pid);
 					ti = proto_tree_add_uint(tree, hf_obdii_mode01_supported_pid, tvb, value_offset, oinfo->value_bytes, this_pid);

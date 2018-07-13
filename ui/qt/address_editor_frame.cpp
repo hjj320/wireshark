@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -34,8 +22,9 @@
 #include <ui_address_editor_frame.h>
 
 #include <QPushButton>
+#include <QKeyEvent>
 
-#include "qt_ui_utils.h"
+#include <ui/qt/utils/qt_ui_utils.h>
 
 // To do:
 // - Fill in currently resolved address.
@@ -81,8 +70,9 @@ void AddressEditorFrame::editAddresses(CaptureFile &cf, int column)
     epan_dissect_init(&edt, cap_file_->epan, FALSE, FALSE);
     col_custom_prime_edt(&edt, &cap_file_->cinfo);
 
-    epan_dissect_run(&edt, cap_file_->cd_t, &cap_file_->phdr,
-        frame_tvbuff_new_buffer(cap_file_->current_frame, &cap_file_->buf), cap_file_->current_frame, &cap_file_->cinfo);
+    epan_dissect_run(&edt, cap_file_->cd_t, &cap_file_->rec,
+        frame_tvbuff_new_buffer(&cap_file_->provider, cap_file_->current_frame, &cap_file_->buf),
+        cap_file_->current_frame, &cap_file_->cinfo);
     epan_dissect_fill_in_columns(&edt, TRUE, TRUE);
 
     /* First check selected column */
@@ -102,6 +92,29 @@ void AddressEditorFrame::editAddresses(CaptureFile &cf, int column)
     ui->addressComboBox->addItems(addresses);
     ui->nameLineEdit->setFocus();
     updateWidgets();
+}
+
+void AddressEditorFrame::showEvent(QShowEvent *event)
+{
+    ui->nameLineEdit->setFocus();
+    ui->nameLineEdit->selectAll();
+
+    AccordionFrame::showEvent(event);
+}
+
+void AddressEditorFrame::keyPressEvent(QKeyEvent *event)
+{
+    if (event->modifiers() == Qt::NoModifier) {
+        if (event->key() == Qt::Key_Escape) {
+            on_buttonBox_rejected();
+        } else if (event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return) {
+            if (ui->buttonBox->button(QDialogButtonBox::Ok)->isEnabled()) {
+                on_buttonBox_accepted();
+            }
+        }
+    }
+
+    AccordionFrame::keyPressEvent(event);
 }
 
 void AddressEditorFrame::updateWidgets()
@@ -129,13 +142,6 @@ void AddressEditorFrame::on_addressComboBox_currentIndexChanged(const QString &)
 void AddressEditorFrame::on_nameLineEdit_textEdited(const QString &)
 {
     updateWidgets();
-}
-
-void AddressEditorFrame::on_nameLineEdit_returnPressed()
-{
-    if (ui->buttonBox->button(QDialogButtonBox::Ok)->isEnabled()) {
-        on_buttonBox_accepted();
-    }
 }
 
 void AddressEditorFrame::on_buttonBox_accepted()

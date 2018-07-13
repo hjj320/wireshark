@@ -5,19 +5,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 /*
  * Updated 1 Dec 10 jjm
@@ -42,12 +30,11 @@
 #include <epan/prefs.h>
 #include <epan/epan_dissect.h>
 
-
 #define RED_COMPONENT(x)   (guint16) (((((x) >> 16) & 0xff) * 65535 / 255))
 #define GREEN_COMPONENT(x) (guint16) (((((x) >>  8) & 0xff) * 65535 / 255))
 #define BLUE_COMPONENT(x)  (guint16) ( (((x)        & 0xff) * 65535 / 255))
 
-static gboolean read_users_filters(GSList **cfl, gchar** err_msg, color_filter_add_cb_func add_cb);
+static int read_filters_file(const gchar *path, FILE *f, gpointer user_data, color_filter_add_cb_func add_cb);
 
 /* the currently active filters */
 static GSList *color_filter_list = NULL;
@@ -174,10 +161,8 @@ color_filters_set_tmp(guint8 filt_nr, const gchar *filter, gboolean disabled, gc
                 g_free(local_err_msg);
                 return FALSE;
             } else {
-                if (colorf->filter_text != NULL)
-                    g_free(colorf->filter_text);
-                if (colorf->c_colorfilter != NULL)
-                    dfilter_free(colorf->c_colorfilter);
+                g_free(colorf->filter_text);
+                dfilter_free(colorf->c_colorfilter);
                 colorf->filter_text = g_strdup(tmpfilter);
                 colorf->c_colorfilter = compiled_filter;
                 colorf->disabled = ((i!=filt_nr) ? TRUE : disabled);
@@ -226,18 +211,15 @@ color_filters_reset_tmp(gchar **err_msg)
 void
 color_filter_delete(color_filter_t *colorf)
 {
-    if (colorf->filter_name != NULL)
-        g_free(colorf->filter_name);
-    if (colorf->filter_text != NULL)
-        g_free(colorf->filter_text);
-    if (colorf->c_colorfilter != NULL)
-        dfilter_free(colorf->c_colorfilter);
+    g_free(colorf->filter_name);
+    g_free(colorf->filter_text);
+    dfilter_free(colorf->c_colorfilter);
     g_free(colorf);
 }
 
 /* delete the specified filter (called from g_slist_foreach) */
 static void
-color_filter_delete_cb(gpointer filter_arg, gpointer unused _U_)
+color_filter_delete_cb(gpointer filter_arg)
 {
     color_filter_t *colorf = (color_filter_t *)filter_arg;
 
@@ -248,8 +230,7 @@ color_filter_delete_cb(gpointer filter_arg, gpointer unused _U_)
 void
 color_filter_list_delete(GSList **cfl)
 {
-    g_slist_foreach(*cfl, color_filter_delete_cb, NULL);
-    g_slist_free(*cfl);
+    g_slist_free_full(*cfl, color_filter_delete_cb);
     *cfl = NULL;
 }
 
@@ -266,8 +247,6 @@ color_filter_clone(color_filter_t *colorf)
     new_colorf->fg_color            = colorf->fg_color;
     new_colorf->disabled            = colorf->disabled;
     new_colorf->c_colorfilter       = NULL;
-    new_colorf->color_edit_dlg_info = NULL;
-    new_colorf->selected            = FALSE;
 
     return new_colorf;
 }
@@ -293,6 +272,54 @@ color_filter_list_clone(GSList *cfl)
     return new_list;
 }
 
+static gboolean
+color_filters_get(gchar** err_msg, color_filter_add_cb_func add_cb)
+{
+    gchar    *path;
+    FILE     *f;
+    int       ret;
+
+    /* start the list with the temporary colorizing rules */
+    color_filters_add_tmp(&color_filter_list);
+
+    /*
+     * Try to get the user's filters.
+     *
+     * Get the path for the file that would have their filters, and
+     * try to open it.
+     */
+    path = get_persconffile_path("colorfilters", TRUE);
+    if ((f = ws_fopen(path, "r")) == NULL) {
+        if (errno != ENOENT) {
+            /* Error trying to open the file; give up. */
+            *err_msg = g_strdup_printf("Could not open filter file\n\"%s\": %s.", path,
+                                       g_strerror(errno));
+            g_free(path);
+            return FALSE;
+	}
+        /* They don't have any filters; try to read the global filters */
+        g_free(path);
+        return color_filters_read_globals(&color_filter_list, err_msg, add_cb);
+    }
+
+    /*
+     * We've opened it; try to read it.
+     */
+    ret = read_filters_file(path, f, &color_filter_list, add_cb);
+    if (ret != 0) {
+        *err_msg = g_strdup_printf("Error reading filter file\n\"%s\": %s.",
+                                   path, g_strerror(errno));
+        fclose(f);
+        g_free(path);
+        return FALSE;
+    }
+
+    /* Success. */
+    fclose(f);
+    g_free(path);
+    return TRUE;
+}
+
 /* Initialize the filter structures (reading from file) for general running, including app startup */
 gboolean
 color_filters_init(gchar** err_msg, color_filter_add_cb_func add_cb)
@@ -300,23 +327,8 @@ color_filters_init(gchar** err_msg, color_filter_add_cb_func add_cb)
     /* delete all currently existing filters */
     color_filter_list_delete(&color_filter_list);
 
-    /* start the list with the temporary colorizing rules */
-    color_filters_add_tmp(&color_filter_list);
-
-    /* try to read the users filters */
-    if (!read_users_filters(&color_filter_list, err_msg, add_cb)) {
-        gchar* local_err_msg = NULL;
-
-        /* if that failed, try to read the global filters */
-        if (!color_filters_read_globals(&color_filter_list, &local_err_msg, add_cb)) {
-            /* Show the first error */
-            g_free(local_err_msg);
-        }
-
-        return (*err_msg == NULL);
-    }
-
-    return TRUE;
+    /* now try to construct the filters list */
+    return color_filters_get(err_msg, add_cb);
 }
 
 gboolean
@@ -327,22 +339,8 @@ color_filters_reload(gchar** err_msg, color_filter_add_cb_func add_cb)
     color_filter_deleted_list = g_slist_concat(color_filter_deleted_list, color_filter_list);
     color_filter_list = NULL;
 
-    /* start the list with the temporary colorizing rules */
-    color_filters_add_tmp(&color_filter_list);
-
-    /* try to read the users filters */
-    if (!read_users_filters(&color_filter_list, err_msg, add_cb)) {
-        gchar* local_err_msg = NULL;
-
-        /* if that failed, try to read the global filters */
-        if (!color_filters_read_globals(&color_filter_list, &local_err_msg, add_cb)) {
-            /* Show the first error */
-            g_free(local_err_msg);
-        }
-
-        return (*err_msg == NULL);
-    }
-    return TRUE;
+    /* now try to construct the filters list */
+    return color_filters_get(err_msg, add_cb);
 }
 
 void
@@ -674,39 +672,6 @@ read_filters_file(const gchar *path, FILE *f, gpointer user_data, color_filter_a
     return ret;
 }
 
-/* read filters from the user's filter file */
-static gboolean
-read_users_filters(GSList **cfl, gchar** err_msg, color_filter_add_cb_func add_cb)
-{
-    gchar    *path;
-    FILE     *f;
-    int       ret;
-
-    /* decide what file to open (from dfilter code) */
-    path = get_persconffile_path("colorfilters", TRUE);
-    if ((f = ws_fopen(path, "r")) == NULL) {
-        if (errno != ENOENT) {
-            *err_msg = g_strdup_printf("Could not open filter file\n\"%s\": %s.", path,
-                          g_strerror(errno));
-        }
-        g_free(path);
-        return FALSE;
-    }
-
-    ret = read_filters_file(path, f, cfl, add_cb);
-    if (ret != 0) {
-        *err_msg = g_strdup_printf("Error reading filter file\n\"%s\": %s.",
-                                   path, g_strerror(errno));
-        fclose(f);
-        g_free(path);
-        return FALSE;
-    }
-
-    fclose(f);
-    g_free(path);
-    return TRUE;
-}
-
 /* read filters from the filter file */
 gboolean
 color_filters_read_globals(gpointer user_data, gchar** err_msg, color_filter_add_cb_func add_cb)
@@ -715,15 +680,28 @@ color_filters_read_globals(gpointer user_data, gchar** err_msg, color_filter_add
     FILE     *f;
     int       ret;
 
-    /* decide what file to open (from dfilter code) */
+    /*
+     * Try to get the global filters.
+     *
+     * Get the path for the file that would have the global filters, and
+     * try to open it.
+     */
     path = get_datafile_path("colorfilters");
     if ((f = ws_fopen(path, "r")) == NULL) {
         if (errno != ENOENT) {
+            /* Error trying to open the file; give up. */
             *err_msg = g_strdup_printf("Could not open global filter file\n\"%s\": %s.", path,
-                          g_strerror(errno));
+                                       g_strerror(errno));
+            g_free(path);
+            return FALSE;
         }
+
+        /*
+         * There is no global filter file; treat that as equivalent to
+         * that file existing bug being empty, and say we succeeded.
+         */
         g_free(path);
-        return FALSE;
+        return TRUE;
     }
 
     ret = read_filters_file(path, f, user_data, add_cb);
@@ -779,7 +757,7 @@ write_filter(gpointer filter_arg, gpointer data_arg)
     color_filter_t *colorf = (color_filter_t *)filter_arg;
     FILE *f = data->f;
 
-    if ( (colorf->selected || !data->only_selected) &&
+    if ( (!data->only_selected) &&
          (strstr(colorf->filter_name,CONVERSATION_COLOR_PREFIX)==NULL) ) {
         fprintf(f,"%s@%s@%s@[%u,%u,%u][%u,%u,%u]\n",
                 colorf->disabled ? "!" : "",

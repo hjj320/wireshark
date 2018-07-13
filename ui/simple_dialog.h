@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #ifndef __SIMPLE_DIALOG_UI_H__
@@ -93,9 +81,6 @@ typedef enum {
  * - simple_dialog_primary_end
  * - Optionally, the secondary message.
  *
- * In the GTK+ UI primary_start and primary_end make up a <span> that adds
- * text formatting. The whole string is then shoved into a GtkLabel.
- *
  * In the Qt UI we use primary_start and _end to split the primary and
  * secondary messages. They are then added to a QMessageBox via setText and
  * setInformativeText respectively. No formatting is applied.
@@ -113,12 +98,10 @@ extern gpointer simple_dialog(ESD_TYPE_E type, gint btn_mask,
 
 /** Surround the primary dialog message text by
  *  simple_dialog_primary_start() and simple_dialog_primary_end().
- *  To highlight the first sentence (will take effect on GTK2 only).
  */
 extern const char *simple_dialog_primary_start(void);
 /** Surround the primary dialog message text by
  *  simple_dialog_primary_start() and simple_dialog_primary_end().
- *  To highlight the first sentence (will take effect on GTK2 only).
  */
 extern const char *simple_dialog_primary_end(void);
 

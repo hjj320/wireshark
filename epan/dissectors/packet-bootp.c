@@ -52,7 +52,13 @@
  * RFC 5223: Discovering Location-to-Service Translation (LoST) Servers Using the Dynamic Host Configuration Protocol (DHCP)
  * RFC 5417: CAPWAP Access Controller DHCP Option
  * RFC 5969: IPv6 Rapid Deployment on IPv4 Infrastructures (6rd)
+ * RFC 6225: Dynamic Host Configuration Protocol Options for Coordinate-Based Location Configuration Information
  * RFC 6607: Virtual Subnet Selection Options for DHCPv4 and DHCPv6
+ * RFC 6704: Forcerenew Nonce Authentication
+ * RFC 6731: Improved Recursive DNS Server Selection for Multi-Interfaced Nodes
+ * RFC 6926: DHCPv4 Bulk Leasequery
+ * RFC 7291: DHCP Options for the Port Control Protocol (PCP)
+ * RFC 7618: Dynamic Allocation of Shared IPv4 Addresses
  * RFC 7710: Captive-Portal Identification Using DHCP or Router Advertisements (RAs)
  * draft-ietf-dhc-fqdn-option-07.txt
  * TFTP Server Address Option for DHCPv4 [draft-raj-dhc-tftp-addr-option-06.txt: http://tools.ietf.org/html/draft-raj-dhc-tftp-addr-option-06]
@@ -82,19 +88,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 /*
@@ -121,10 +115,9 @@
 #include <epan/tap.h>
 #include <epan/stat_tap_ui.h>
 #include <epan/arptypes.h>
-#include <epan/sminmpec.h>
+#include <epan/addr_resolv.h>
 #include <epan/expert.h>
 #include <epan/uat.h>
-#include <epan/oui.h>
 #include <epan/strutil.h>
 #include <wsutil/str_util.h>
 #include <wsutil/strtoi.h>
@@ -533,7 +526,27 @@ static int hf_bootp_option125_cl_modem_capabilities = -1;		/* 125:CL 5 */
 static int hf_bootp_option_subnet_selection_option = -1;		/* 118 */
 static int hf_bootp_option_lost_server_domain_name = -1;		/* 137 */
 static int hf_bootp_option_capwap_access_controller = -1;		/* 138 */
+static int hf_bootp_option_andsf_server = -1;				/* 142 */
+static int hf_bootp_option_forcerenew_nonce_algo = -1;			/* 145 */
+static int hf_bootp_option_rdnss_reserved = -1;				/* 146 */
+static int hf_bootp_option_rdnss_pref = -1;				/* 146 */
+static int hf_bootp_option_rdnss_prim_dns_server = -1;			/* 146 */
+static int hf_bootp_option_rdnss_sec_dns_server = -1;			/* 146 */
+static int hf_bootp_option_rdnss_domain = -1;				/* 146 */
 static int hf_bootp_option_tftp_server_address = -1;			/* 150 */
+static int hf_bootp_option_bulk_lease_status_code = -1;			/* 151 */
+static int hf_bootp_option_bulk_lease_status_message = -1;		/* 151 */
+static int hf_bootp_option_bulk_lease_base_time = -1;			/* 152 */
+static int hf_bootp_option_bulk_lease_start_time_of_state = -1;		/* 153 */
+static int hf_bootp_option_bulk_lease_query_start = -1;			/* 154 */
+static int hf_bootp_option_bulk_lease_query_end = -1;			/* 155 */
+static int hf_bootp_option_bulk_lease_dhcp_state = -1;			/* 156 */
+static int hf_bootp_option_bulk_lease_data_source = -1;			/* 157 */
+static int hf_bootp_option_pcp_list_length = -1;			/* 158 */
+static int hf_bootp_option_pcp_server = -1;				/* 158 */
+static int hf_bootp_option_portparams_offset = -1;			/* 159 */
+static int hf_bootp_option_portparams_psid_length = -1;			/* 159 */
+static int hf_bootp_option_portparams_psid = -1;			/* 159 */
 static int hf_bootp_option_captive_portal = -1;				/* 160 */
 static int hf_bootp_option_mudurl = -1;					/* 161 */
 static int hf_bootp_option_pxe_config_file = -1;			/* 209 */
@@ -602,6 +615,7 @@ static gint ett_bootp_o43_bsdp_attributes = -1;
 static gint ett_bootp_o43_bsdp_image_desc_list = -1;
 static gint ett_bootp_o43_bsdp_image_desc = -1;
 static gint ett_bootp_o43_bsdp_attributes_flags = -1;
+static gint ett_bootp_option158_pcp_list = -1;
 
 static expert_field ei_bootp_bad_length = EI_INIT;
 static expert_field ei_bootp_bad_bitfield = EI_INIT;
@@ -619,6 +633,7 @@ static expert_field ei_bootp_option125_enterprise_malformed = EI_INIT;
 static expert_field ei_bootp_option_6RD_malformed = EI_INIT;
 static expert_field ei_bootp_option82_vi_cl_tag_unknown = EI_INIT;
 static expert_field ei_bootp_option_parse_err = EI_INIT;
+static expert_field ei_bootp_nonstd_option_data = EI_INIT;
 static expert_field ei_bootp_suboption_invalid = EI_INIT;
 static expert_field ei_bootp_secs_le = EI_INIT;
 static expert_field ei_bootp_end_option_missing = EI_INIT;
@@ -628,6 +643,7 @@ static expert_field ei_bootp_boot_filename_overloaded_by_dhcp = EI_INIT;
 static expert_field ei_bootp_option_isns_ignored_bitfield = EI_INIT;
 static expert_field ei_bootp_option242_avaya_l2qvlan_invalid = EI_INIT;
 static expert_field ei_bootp_option242_avaya_vlantest_invalid = EI_INIT;
+static expert_field ei_bootp_option93_client_arch_ambiguous = EI_INIT;
 
 static dissector_table_t bootp_option_table;
 static dissector_table_t bootp_enterprise_table;
@@ -852,6 +868,40 @@ static const value_string duidtype_vals[] =
 	{ 0, NULL }
 };
 
+static const value_string forcerenew_nonce_algo_vals[] = {
+	{ 1, "HMAC-MD5" },
+	{ 0, NULL },
+};
+
+static const value_string rdnss_pref_vals[] = {
+	{ 0, "Medium" },
+	{ 1, "High" },
+	{ 2, "Reserved" },
+	{ 3, "Low" },
+	{ 0, NULL },
+};
+
+static const value_string bulk_lease_dhcp_status_code_vals[] = {
+	{ 0, "Success" },
+	{ 1, "UpsecFail" },
+	{ 2, "QueryTerminated" },
+	{ 3, "MalformedQuery" },
+	{ 4, "NotAllowed" },
+	{ 0, NULL },
+};
+
+static const value_string bulk_lease_dhcp_state_vals[] = {
+	{ 1, "Available" },
+	{ 2, "Active" },
+	{ 3, "Expired" },
+	{ 4, "Released" },
+	{ 5, "Abandoned" },
+	{ 6, "Reset" },
+	{ 7, "Remote" },
+	{ 8, "Transitioning" },
+	{ 0, NULL },
+};
+
 static gboolean novell_string = FALSE;
 
 static guint bootp_uuid_endian = ENC_LITTLE_ENDIAN;
@@ -934,6 +984,11 @@ static const true_false_string tfs_isns_function_dd_based_auth = {
 static const true_false_string tfs_isns_functions_sec_distrib = {
 	"Download from iSNS server",
 	"By other means",
+};
+
+static const true_false_string tfs_bulk_lease_data_source = {
+	"Remote",
+	"Local"
 };
 
 enum field_type {
@@ -1056,6 +1111,18 @@ static const value_string bootp_nbnt_vals[] = {
 	{0,	NULL	 }
 };
 
+/*
+ * There is confusion around some Client Architecture IDs: RFC 4578 section 2.1
+ * lists *requested* architecture IDs, however the actual assigned IDs
+ * (http://www.ietf.org/assignments/dhcpv6-parameters/dhcpv6-parameters.xml#processor-architecture)
+ * differ.  Specifically,
+ *
+ *    EFI Byte Code (EFI BC, EBC) was 7 in RFC 4578, but is assigned 9 by IETF.
+ *    EFI x64 was 9 in RFC 4578, but is assigned 7 by IETF.
+ *
+ * For confirmation, refer to RFC erratum 4625:
+ *    https://www.rfc-editor.org/errata/eid4625
+ */
 static const value_string bootp_client_arch[] = {
 	{ 0x0000, "IA x86 PC" },
 	{ 0x0001, "NEC/PC98" },
@@ -1064,9 +1131,32 @@ static const value_string bootp_client_arch[] = {
 	{ 0x0004, "ArcX86" },
 	{ 0x0005, "Intel Lean Client" },
 	{ 0x0006, "EFI IA32" },
-	{ 0x0007, "EFI BC" },
+	{ 0x0007, "EFI x64" }, /* *Not* EFI BC.  See comment above. */
 	{ 0x0008, "EFI Xscale" },
-	{ 0x0009, "EFI x86-64" },
+	{ 0x0009, "EFI BC" },  /* *Not* EFI x64.  See comment above. */
+	{ 0x000a, "ARM 32-bit UEFI" },
+	{ 0x000b, "ARM 64-bit UEFI" },
+	{ 0x000c, "PowerPC Open Firmware" },
+	{ 0x000d, "PowerPC ePAPR" },
+	{ 0x000e, "POWER OPAL v3" },
+	{ 0x000f, "x86 UEFI HTTP" },
+	{ 0x0010, "x64 UEFI HTTP" },
+	{ 0x0011, "EBC UEFI HTTP" },
+	{ 0x0012, "ARM 32-bit UEFI HTTP" },
+	{ 0x0013, "ARM 64-bit UEFI HTTP" },
+	{ 0x0014, "PC/AT HTTP" },
+	{ 0x0015, "ARM 32-bit uboot" },
+	{ 0x0016, "ARM 64-bit uboot" },
+	{ 0x0017, "ARM 32-bit uboot HTTP" },
+	{ 0x0018, "ARM 64-bit uboot HTTP" },
+	{ 0x0019, "RISC-V 32-bit UEFI" },
+	{ 0x001a, "RISC-V 32-bit UEFI HTTP" },
+	{ 0x001b, "RISC-V 64-bit UEFI" },
+	{ 0x001c, "RISC-V 64-bit UEFI HTTP" },
+	{ 0x001d, "RISC-V 128-bit UEFI" },
+	{ 0x001e, "RISC-V 128-bit UEFI HTTP" },
+	{ 0x001f, "s390 Basic" },
+	{ 0x0020, "s390 Extended" },
 	{ 0,	  NULL }
 };
 
@@ -1202,7 +1292,7 @@ static const string_string option242_avaya_static_vals[] = {
 #define BOOTP_OPT_NUM	256
 
 /* All of the options that have a "basic" type that can be handled by dissect_bootpopt_basic_type() */
-#define BOOTP_OPTION_BASICTYPE_RANGE "1-20,22-32,34-42,44-51,53-54,56-59,64-76,86-87,91-93,100-101,112-113,116,118,137-138,150,161,209-210,252"
+#define BOOTP_OPTION_BASICTYPE_RANGE "1-20,22-32,34-42,44-51,53-54,56-59,64-76,86-87,91-92,100-101,112-113,116,118,137-138,142,150,153,156-157,161,209-210,252"
 
 /* Re-define structure.	 Values to be updated by bootp_init_protocol */
 static struct opt_info bootp_opt[BOOTP_OPT_NUM];
@@ -1301,7 +1391,7 @@ static struct opt_info default_bootp_opt[BOOTP_OPT_NUM] = {
 /*  90 */ { "Authentication",				special, NULL},
 /*  91 */ { "Client last transaction time",		time_in_u_secs, &hf_bootp_option_client_last_transaction_time },
 /*  92 */ { "Associated IP option",			ipv4_list, &hf_bootp_option_associated_ip_option },
-/*  93 */ { "Client System Architecture",		val_u_short, &hf_bootp_option_client_system_architecture },
+/*  93 */ { "Client System Architecture",		special, NULL},
 /*  94 */ { "Client Network Device Interface",		special, NULL},
 /*  95 */ { "LDAP [TODO:RFC3679]",			opaque, NULL },
 /*  96 */ { "Removed/Unassigned",			opaque, NULL },
@@ -1350,24 +1440,24 @@ static struct opt_info default_bootp_opt[BOOTP_OPT_NUM] = {
 /* 139 */ { "IPv4 Address-MoS",				opaque, NULL },
 /* 140 */ { "IPv4 FQDN-MoS",				opaque, NULL },
 /* 141 */ { "SIP UA Configuration Domains",		opaque, NULL },
-/* 142 */ { "Unassigned",				opaque, NULL },
-/* 143 */ { "Unassigned",				opaque, NULL },
-/* 144 */ { "Unassigned",				opaque, NULL },
-/* 145 */ { "Unassigned",				opaque, NULL },
-/* 146 */ { "Unassigned",				opaque, NULL },
+/* 142 */ { "IPv4 Address ANDSF",			ipv4_list, &hf_bootp_option_andsf_server },
+/* 143 */ { "Zerotouch Redirect [TODO: draft-ietf-netconf-zerotouch]",	opaque, NULL },
+/* 144 */ { "Geospatial Location [TODO:RFC6225]",	opaque, NULL },
+/* 145 */ { "Forcerenew Nonce Capable",			special, NULL },
+/* 146 */ { "RDNSS Selection",				special, NULL },
 /* 147 */ { "Unassigned",				opaque, NULL },
 /* 148 */ { "Unassigned",				opaque, NULL },
 /* 149 */ { "Unassigned",				opaque, NULL },
 /* 150 */ { "TFTP Server Address",			ipv4_list, &hf_bootp_option_tftp_server_address },
-/* 151 */ { "Unassigned",				opaque, NULL },
-/* 152 */ { "Unassigned",				opaque, NULL },
-/* 153 */ { "Unassigned",				opaque, NULL },
-/* 154 */ { "Unassigned",				opaque, NULL },
-/* 155 */ { "Unassigned",				opaque, NULL },
-/* 156 */ { "Unassigned",				opaque, NULL },
-/* 157 */ { "Unassigned",				opaque, NULL },
-/* 158 */ { "Unassigned",				opaque, NULL },
-/* 159 */ { "Unassigned",				opaque, NULL },
+/* 151 */ { "Leasequery Status code",			special, NULL },
+/* 152 */ { "Leasequery Base Time",			special, NULL },
+/* 153 */ { "Leasequery Start Time of State",		time_in_u_secs, &hf_bootp_option_bulk_lease_start_time_of_state },
+/* 154 */ { "Leasequery Query Start Time",		special, NULL },
+/* 155 */ { "Leasequery Query End Time",		special, NULL },
+/* 156 */ { "Leasequery Dhcp State",			val_u_byte, &hf_bootp_option_bulk_lease_dhcp_state },
+/* 157 */ { "Leasequery Data Source",			val_boolean, &hf_bootp_option_bulk_lease_data_source },
+/* 158 */ { "PCP Server",				special, NULL },
+/* 159 */ { "Portparams",				special, NULL },
 /* 160 */ { "DHCP Captive-Portal",			special, NULL },
 /* 161 */ { "Manufacturer Usage Description",		string, &hf_bootp_option_mudurl},
 /* 162 */ { "Unassigned",				opaque, NULL },
@@ -1487,11 +1577,7 @@ static void* uat_bootp_record_copy_cb(void* n, const void* o, size_t siz _U_) {
 	uat_bootp_record_t* new_record = (uat_bootp_record_t *)n;
 	const uat_bootp_record_t* old_record = (const uat_bootp_record_t *)o;
 
-	if (old_record->text) {
-		new_record->text = g_strdup(old_record->text);
-	} else {
-		new_record->text = NULL;
-	}
+	new_record->text = g_strdup(old_record->text);
 
 	return new_record;
 }
@@ -1509,7 +1595,7 @@ static gboolean uat_bootp_record_update_cb(void* r, char** err) {
 static void uat_bootp_record_free_cb(void*r) {
 	uat_bootp_record_t* rec = (uat_bootp_record_t *)r;
 
-	if (rec->text) g_free(rec->text);
+	g_free(rec->text);
 }
 
 UAT_DEC_CB_DEF(uat_bootp_records, opt, uat_bootp_record_t)
@@ -1691,7 +1777,7 @@ bootp_handle_basic_types(packet_info *pinfo, proto_tree *tree, proto_item *item,
 		}
 
 		if (hf != NULL) {
-			time_s_secs = (gint32) tvb_get_ntohl(tvb, offset);
+			time_s_secs = tvb_get_ntohil(tvb, offset);
 			proto_tree_add_int_format_value(tree, *hf,
 				tvb, offset, 4, time_s_secs, "(%ds) %s", time_s_secs, signed_time_secs_to_str(wmem_packet_scope(), time_s_secs));
 		}
@@ -1726,7 +1812,7 @@ bootp_handle_basic_types(packet_info *pinfo, proto_tree *tree, proto_item *item,
 }
 
 static int
-dissect_bootpopt_basic_type(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data)
+dissect_bootpopt_basic_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
 	struct opt_info *opt;
 	bootp_option_data_t *option_data = (bootp_option_data_t*)data;
@@ -2195,6 +2281,13 @@ dissect_bootpopt_user_class_information(tvbuff_t *tvb, packet_info *pinfo, proto
 		return 1;
 	}
 
+	if (!tvb_strneql(tvb, offset, "iPXE", 4)) {
+		/* The iPXE is known to violate RFC 3004, http://forum.ipxe.org/showthread.php?tid=7530 */
+		proto_item *expert_ti = proto_tree_add_item(tree, hf_bootp_option77_user_class_data, tvb, offset, -1, ENC_NA);
+		expert_add_info(pinfo, expert_ti, &ei_bootp_nonstd_option_data);
+		return tvb_captured_length(tvb);
+	}
+
 	while (tvb_reported_length_remaining(tvb, offset) > 0) {
 		/* Create subtree for instance of User Class. */
 		vtix = proto_tree_add_uint_format_value(tree, hf_bootp_option77_user_class,
@@ -2268,7 +2361,7 @@ dissect_bootpopt_slp_service_scope(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
 }
 
 static int
-dissect_bootpopt_client_full_domain_name(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_bootpopt_client_full_domain_name(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	static const int * fqdn_hf_flags[] = {
 		&hf_bootp_fqdn_mbz,
@@ -2311,7 +2404,7 @@ dissect_bootpopt_client_full_domain_name(tvbuff_t *tvb, packet_info *pinfo _U_, 
 }
 
 static int
-dissect_bootpopt_novell_servers(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_bootpopt_novell_servers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
@@ -2415,6 +2508,47 @@ dissect_bootpopt_dhcp_authentication(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 
 		proto_tree_add_item(tree, hf_bootp_option_dhcp_authentication_information, tvb, offset, tvb_reported_length_remaining(tvb, offset), ENC_ASCII|ENC_NA);
 		break;
+	}
+
+	return tvb_captured_length(tvb);
+}
+
+static int
+dissect_bootpopt_client_architecture(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+{
+	int offset = 0;
+
+	while (tvb_reported_length_remaining(tvb, offset) > 1) {
+		guint32 architecture_id;
+		proto_item *pi;
+
+		pi = proto_tree_add_item_ret_uint(tree, hf_bootp_option_client_system_architecture, tvb, offset, 2, ENC_BIG_ENDIAN, &architecture_id);
+		offset += 2;
+
+		/*
+		 * Some Client Architecture IDs are widely misused.  For
+		 * details, refer to the comment at the definition of
+		 * bootp_client_arch.
+		 *
+		 * The most common problem is a client using architecture ID 9
+		 * when performing an EFI x64 boot.  Windows Server 2008 WDS
+		 * does not recognize ID 9, but most other DHCP servers
+		 * (including newer versions of WDS) silently map architecture
+		 * ID 9 to x64 in order to accommodate these clients.
+		 */
+		if (architecture_id == 9) {
+			expert_add_info_format(pinfo, pi, &ei_bootp_option93_client_arch_ambiguous, "Client Architecture ID 9 is often incorrectly used for EFI x64");
+		}
+
+		/*
+		 * Technically, architecture ID 7 is ambiguous for the same
+		 * reason, but it's extremely unlikely to be a real world
+		 * problem, so a warning would probably just be unwelcome
+		 * noise.
+		 */
+	}
+	if (tvb_reported_length_remaining(tvb, offset) > 0) {
+		expert_add_info_format(pinfo, tree, &ei_bootp_bad_length, "Option length isn't a multiple of 2");
 	}
 
 	return tvb_captured_length(tvb);
@@ -2705,9 +2839,9 @@ dissect_bootpopt_sip_servers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 					/* RFC 3396 is not used, so we can easily link the fqdn with v_tree. */
 					proto_tree_add_item(tree, hf_bootp_option_sip_server_address, rfc3396_sip_server.tvb_composite, composite_offset, 4, ENC_BIG_ENDIAN);
 				} else {
-					guint32 sip_server = tvb_get_ntohl(rfc3396_sip_server.tvb_composite, composite_offset);
+					guint32 sip_server = tvb_get_ipv4(rfc3396_sip_server.tvb_composite, composite_offset);
 					/* RFC 3396 is used, so the option is split into several option 120. We don't link fqdn with v_tree. */
-					proto_tree_add_uint(tree, hf_bootp_option_sip_server_address, tvb, 0, 0, sip_server);
+					proto_tree_add_ipv4(tree, hf_bootp_option_sip_server_address, tvb, 0, 0, sip_server);
 				}
 				composite_offset += 4;
 			}
@@ -2857,6 +2991,44 @@ dissect_bootpopt_vi_vendor_class(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 }
 
 static int
+dissect_bootpopt_forcerenew_nonce(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+{
+	int offset = 0;
+	while ( tvb_reported_length_remaining(tvb, offset) > 0) {
+		proto_tree_add_item(tree, hf_bootp_option_forcerenew_nonce_algo, tvb, offset, 1, ENC_BIG_ENDIAN);
+		offset += 1;
+		}
+
+	return tvb_captured_length(tvb);
+}
+
+static int
+dissect_bootpopt_rdnss(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+{
+	int offset = 0;
+	const guchar *dns_name;
+	guint dns_name_len;
+
+	if (tvb_reported_length(tvb) < 10) {
+		expert_add_info_format(pinfo, tree, &ei_bootp_bad_length, "length must be >= 10");
+		return 1;
+	}
+	proto_tree_add_item(tree, hf_bootp_option_rdnss_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_bootp_option_rdnss_pref, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
+	proto_tree_add_item(tree, hf_bootp_option_rdnss_prim_dns_server, tvb, offset, 4, ENC_BIG_ENDIAN);
+	offset += 4;
+	proto_tree_add_item(tree, hf_bootp_option_rdnss_sec_dns_server, tvb, offset, 4, ENC_BIG_ENDIAN);
+	offset += 4;
+
+	get_dns_name(tvb, offset, tvb_reported_length_remaining(tvb,offset), offset, &dns_name, &dns_name_len);
+	proto_tree_add_string(tree, hf_bootp_option_rdnss_domain, tvb, offset,
+			tvb_reported_length_remaining(tvb,offset), format_text(wmem_packet_scope(), dns_name, dns_name_len));
+
+	return tvb_captured_length(tvb);
+}
+
+static int
 dissect_bootpopt_dhcp_captive_portal(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	proto_item *ti_cp;
@@ -2867,7 +3039,103 @@ dissect_bootpopt_dhcp_captive_portal(tvbuff_t *tvb, packet_info *pinfo _U_, prot
 }
 
 static int
-dissect_bootpopt_6RD_option(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_bootpopt_bulk_lease_query_start(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+{
+	if (tvb_reported_length(tvb) != 4) {
+		expert_add_info_format(pinfo, tree, &ei_bootp_bad_length, "length must be 4");
+		return 1;
+	}
+	proto_tree_add_item(tree, hf_bootp_option_bulk_lease_query_start, tvb, 0, 4, ENC_TIME_SECS_NTP|ENC_BIG_ENDIAN);
+
+	return tvb_captured_length(tvb);
+}
+
+static int
+dissect_bootpopt_bulk_lease_query_end(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+{
+	if (tvb_reported_length(tvb) != 4) {
+		expert_add_info_format(pinfo, tree, &ei_bootp_bad_length, "length must be 4");
+		return 1;
+	}
+	proto_tree_add_item(tree, hf_bootp_option_bulk_lease_query_end, tvb, 0, 4, ENC_TIME_SECS_NTP|ENC_BIG_ENDIAN);
+
+	return tvb_captured_length(tvb);
+}
+
+static int
+dissect_bootpopt_bulk_lease_base_time(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+{
+	if (tvb_reported_length(tvb) != 4) {
+		expert_add_info_format(pinfo, tree, &ei_bootp_bad_length, "length must be 4");
+		return 1;
+	}
+	proto_tree_add_item(tree, hf_bootp_option_bulk_lease_base_time, tvb, 0, 4, ENC_TIME_SECS_NTP|ENC_BIG_ENDIAN);
+
+	return tvb_captured_length(tvb);
+}
+
+static int
+dissect_bootpopt_bulk_lease_status_code(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+{
+	if (tvb_reported_length(tvb) < 1) {
+		expert_add_info_format(pinfo, tree, &ei_bootp_bad_length, "length must >= 1");
+		return 1;
+	}
+	proto_tree_add_item(tree, hf_bootp_option_bulk_lease_status_code, tvb, 0, 1, ENC_BIG_ENDIAN);
+	if ( tvb_reported_length_remaining(tvb, 1) > 0) {
+		proto_tree_add_item(tree, hf_bootp_option_bulk_lease_status_message, tvb, 1, tvb_reported_length_remaining(tvb, 1), ENC_UTF_8|ENC_NA);
+		}
+
+	return tvb_captured_length(tvb);
+}
+
+static int
+dissect_bootpopt_pcp_server(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+{
+	proto_tree *tree_pcp;
+	int offset = 0;
+	guint8 list_length;
+	guint8 ip_list_length;
+	proto_item *ti_pcp;
+
+	if (tvb_reported_length(tvb) < 5) {
+		expert_add_info_format(pinfo, tree, &ei_bootp_bad_length, "length must >= 5");
+		return 1;
+	}
+	while (tvb_reported_length_remaining(tvb, offset) >= 5) {
+		ip_list_length = 0;
+		list_length = tvb_get_guint8(tvb, offset);
+		tree_pcp = proto_tree_add_subtree(tree, tvb, offset, list_length, ett_bootp_option158_pcp_list,
+						&ti_pcp, "PCP server list");
+		proto_tree_add_item(tree_pcp, hf_bootp_option_pcp_list_length, tvb, offset, 1, ENC_NA);
+		offset += 1;
+		ip_list_length += 1;
+		while (((list_length - 1)%4 == 0) && (ip_list_length < list_length) && tvb_reported_length_remaining(tvb,offset) >= 4) {
+			proto_tree_add_item(tree_pcp, hf_bootp_option_pcp_server, tvb, offset, 4, ENC_NA);
+			offset += 4;
+			ip_list_length += 4;
+		}
+	}
+
+	return tvb_captured_length(tvb);
+}
+
+static int
+dissect_bootpopt_portparams(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+{
+	if (tvb_reported_length(tvb) != 4) {
+		expert_add_info_format(pinfo, tree, &ei_bootp_bad_length, "length must be 4");
+		return 1;
+	}
+	proto_tree_add_item(tree, hf_bootp_option_portparams_offset, tvb, 0, 1, ENC_NA);
+	proto_tree_add_item(tree, hf_bootp_option_portparams_psid_length, tvb, 1, 1, ENC_NA);
+	proto_tree_add_item(tree, hf_bootp_option_portparams_psid, tvb, 2, 2, ENC_NA);
+
+	return tvb_captured_length(tvb);
+}
+
+static int
+dissect_bootpopt_6RD_option(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
@@ -2897,7 +3165,7 @@ dissect_bootpopt_6RD_option(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 }
 
 static int
-dissect_bootpopt_avaya_ip_telephone(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_bootpopt_avaya_ip_telephone(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 	proto_tree *o242avaya_v_tree;
@@ -3133,7 +3401,7 @@ bootp_dhcp_decode_agent_info(packet_info *pinfo, proto_item *v_ti, proto_tree *v
 }
 
 static int
-dissect_bootpopt_relay_agent_info(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_bootpopt_relay_agent_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
@@ -3886,6 +4154,7 @@ dissect_aruba_instant_ap_vendor_info_heur( tvbuff_t *tvb, packet_info *pinfo _U_
 }
 
 static const value_string option43_bsdp_suboption_vals[] = {
+	{  0, "Pad" },
 	{  1, "Message Type" },
 	{  2, "Version" },
 	{  3, "Server Identifier" },
@@ -3898,6 +4167,7 @@ static const value_string option43_bsdp_suboption_vals[] = {
 	{ 10, "NetBoot 1.0 Firmware" },
 	{ 11, "Boot Image Attributes Filter List" },
 	{ 12, "Maximum Message Size" },
+	{ 255, "End" },
 	{ 0, NULL}
 };
 
@@ -3922,22 +4192,31 @@ dissect_vendor_bsdp_suboption(packet_info *pinfo, proto_item *v_ti, proto_tree *
 	int	    attributes_off;
 	guint8      subopt, string_len;
 	guint8      subopt_len, attributes_len;
+	guint       item_len;
 	proto_tree *o43bsdp_v_tree, *o43bsdp_va_tree, *o43bsdp_vb_tree, *o43bsdp_vc_tree, *o43bsdp_vd_tree;
 	proto_item *vti, *ti, *tj;
 
 	subopt = tvb_get_guint8(tvb, optoff);
 	suboptoff++;
 
-	if (suboptoff >= optend) {
+	if (subopt == 0 || subopt == 255) {
+		/* Pad (0) and End (255) have implicit length of 1. */
+		item_len = 1;
+	} else if (suboptoff >= optend) {
 		expert_add_info_format(pinfo, v_ti, &ei_bootp_missing_subopt_length,
 									"Suboption %d: no room left in option for suboption length", subopt);
 		return (optend);
+	} else {
+		subopt_len = tvb_get_guint8(tvb, suboptoff);
+		item_len = subopt_len + 2;
 	}
 
-	subopt_len = tvb_get_guint8(tvb, suboptoff);
 	vti = proto_tree_add_uint_format_value(v_tree, hf_bootp_option43_bsdp_suboption,
-				tvb, optoff, subopt_len+2, subopt, "(%d) %s",
+				tvb, optoff, item_len, subopt, "(%d) %s",
 				subopt, val_to_str_const(subopt, option43_bsdp_suboption_vals, "Unknown"));
+	if (item_len == 1) {
+		return (optoff + 1);
+	}
 
 	o43bsdp_v_tree = proto_item_add_subtree(vti, ett_bootp_option43_suboption);
 	proto_tree_add_item(o43bsdp_v_tree, hf_bootp_suboption_length, tvb, suboptoff, 1, ENC_BIG_ENDIAN);
@@ -4019,7 +4298,7 @@ dissect_vendor_bsdp_suboption(packet_info *pinfo, proto_item *v_ti, proto_tree *
 			break;
 	}
 
-	optoff += (subopt_len + 2);
+	optoff += item_len;
 	return optoff;
 }
 
@@ -6017,7 +6296,7 @@ dissect_packetcable_ietf_ccc(packet_info *pinfo, proto_item *v_ti, proto_tree *v
 }
 
 static int
-dissect_bootpopt_packetcable_ccc(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+dissect_bootpopt_packetcable_ccc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	int offset = 0;
 
@@ -6350,14 +6629,14 @@ typedef enum
 
 static stat_tap_table_item bootp_stat_fields[] = {{TABLE_ITEM_STRING, TAP_ALIGN_LEFT, "DHCP Message Type", "%-25s"}, {TABLE_ITEM_UINT, TAP_ALIGN_RIGHT, "Packets", "%d"}};
 
-static void bootp_stat_init(stat_tap_table_ui* new_stat, new_stat_tap_gui_init_cb gui_callback, void* gui_data)
+static void bootp_stat_init(stat_tap_table_ui* new_stat, stat_tap_gui_init_cb gui_callback, void* gui_data)
 {
 	int num_fields = sizeof(bootp_stat_fields)/sizeof(stat_tap_table_item);
-	stat_tap_table* table = new_stat_tap_init_table("DHCP Statistics", num_fields, 0, NULL, gui_callback, gui_data);
+	stat_tap_table* table = stat_tap_init_table("DHCP Statistics", num_fields, 0, NULL, gui_callback, gui_data);
 	int i = 0;
 	stat_tap_table_item_type items[sizeof(bootp_stat_fields)/sizeof(stat_tap_table_item)];
 
-	new_stat_tap_add_table(new_stat, table);
+	stat_tap_add_table(new_stat, table);
 
 	/* Add a row for each value type */
 	while (opt53_text[i].strptr)
@@ -6367,7 +6646,7 @@ static void bootp_stat_init(stat_tap_table_ui* new_stat, new_stat_tap_gui_init_c
 		items[PACKET_COLUMN].type = TABLE_ITEM_UINT;
 		items[PACKET_COLUMN].value.uint_value = 0;
 
-		new_stat_tap_init_table_row(table, i, num_fields, items);
+		stat_tap_init_table_row(table, i, num_fields, items);
 		i++;
 	}
 }
@@ -6375,7 +6654,7 @@ static void bootp_stat_init(stat_tap_table_ui* new_stat, new_stat_tap_gui_init_c
 static gboolean
 bootp_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *edt _U_, const void *data)
 {
-	new_stat_data_t* stat_data = (new_stat_data_t*)tapdata;
+	stat_data_t* stat_data = (stat_data_t*)tapdata;
 	const char* value = (const char*)data;
 	stat_tap_table* table;
 	stat_tap_table_item_type* msg_data;
@@ -6387,9 +6666,9 @@ bootp_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *edt _U_
 		return FALSE;
 
 	table = g_array_index(stat_data->stat_tap_data->tables, stat_tap_table*, i);
-	msg_data = new_stat_tap_get_field_data(table, idx, PACKET_COLUMN);
+	msg_data = stat_tap_get_field_data(table, idx, PACKET_COLUMN);
 	msg_data->value.uint_value++;
-	new_stat_tap_set_field_data(table, idx, PACKET_COLUMN, msg_data);
+	stat_tap_set_field_data(table, idx, PACKET_COLUMN, msg_data);
 
 	return TRUE;
 }
@@ -6402,9 +6681,9 @@ bootp_stat_reset(stat_tap_table* table)
 
 	for (element = 0; element < table->num_elements; element++)
 	{
-		item_data = new_stat_tap_get_field_data(table, element, PACKET_COLUMN);
+		item_data = stat_tap_get_field_data(table, element, PACKET_COLUMN);
 		item_data->value.uint_value = 0;
-		new_stat_tap_set_field_data(table, element, PACKET_COLUMN, item_data);
+		stat_tap_set_field_data(table, element, PACKET_COLUMN, item_data);
 	}
 }
 
@@ -6924,7 +7203,7 @@ proto_register_bootp(void)
 
 		{ &hf_bootp_client_identifier_enterprise_num,
 		  { "Enterprise-number", "bootp.client_id.enterprise_num",
-		    FT_UINT32, BASE_DEC|BASE_EXT_STRING, &sminmpec_values_ext, 0x0,
+		    FT_UINT32, BASE_ENTERPRISES, STRINGS_ENTERPRISES, 0x0,
 		    NULL, HFILL }},
 
 		{ &hf_bootp_client_identifier,
@@ -7972,7 +8251,7 @@ proto_register_bootp(void)
 
 		{ &hf_bootp_option82_vi_enterprise,
 		  { "Enterprise", "bootp.option.agent_information_option.vi.enterprise",
-		    FT_UINT32, BASE_DEC|BASE_EXT_STRING, &sminmpec_values_ext, 0x0,
+		    FT_UINT32, BASE_ENTERPRISES, STRINGS_ENTERPRISES, 0x0,
 		    "Option 82:9 VI Enterprise", HFILL }},
 
 		{ &hf_bootp_option82_vi_data_length,
@@ -8398,7 +8677,7 @@ proto_register_bootp(void)
 		    "Option 120: SIP Server Address", HFILL }},
 
 		{ &hf_bootp_option_classless_static_route,
-		  { "Subnet/MaskWidth-Router", "bootp.option.classless_static_route.",
+		  { "Subnet/MaskWidth-Router", "bootp.option.classless_static_route",
 		    FT_BYTES, BASE_NONE, NULL, 0x0,
 		    "Option 121: Subnet/MaskWidth-Router", HFILL }},
 
@@ -8469,7 +8748,7 @@ proto_register_bootp(void)
 
 		{ &hf_bootp_option_vi_class_enterprise,
 		  { "Enterprise", "bootp.option.vi_class.enterprise",
-		    FT_UINT32, BASE_DEC|BASE_EXT_STRING, &sminmpec_values_ext, 0x00,
+		    FT_UINT32, BASE_ENTERPRISES, STRINGS_ENTERPRISES, 0x00,
 		    "Option 124: Enterprise", HFILL }},
 
 		{ &hf_bootp_option_vi_class_data_length,
@@ -8484,7 +8763,7 @@ proto_register_bootp(void)
 
 		{ &hf_bootp_option125_enterprise,
 		  { "Enterprise", "bootp.option.vi.enterprise",
-		    FT_UINT32, BASE_DEC|BASE_EXT_STRING, &sminmpec_values_ext, 0x00,
+		    FT_UINT32, BASE_ENTERPRISES, STRINGS_ENTERPRISES, 0x00,
 		    "Option 125: Enterprise", HFILL }},
 
 		{ &hf_bootp_option125_length,
@@ -8524,7 +8803,7 @@ proto_register_bootp(void)
 
 		{ &hf_bootp_option125_tr111_device_manufacturer_oui,
 		  { "DeviceManufacturerOUI", "bootp.option.vi.tr111.device_manufacturer_oui",
-		    FT_UINT24, BASE_HEX, VALS(oui_vals), 0x0,
+		    FT_UINT24, BASE_OUI, NULL, 0x0,
 		    "Option 125:TR 111 1 DeviceManufacturerOUI", HFILL }},
 
 		{ &hf_bootp_option125_tr111_device_serial_number,
@@ -8597,10 +8876,110 @@ proto_register_bootp(void)
 		    FT_IPv4, BASE_NONE, NULL, 0x00,
 		    "Option 138: CAPWAP Access Controllers", HFILL }},
 
+		{ &hf_bootp_option_andsf_server,
+		  { "ANDSF Server", "bootp.option.andsf_server",
+		    FT_IPv4, BASE_NONE, NULL, 0x00,
+		    "ANDSF (Access Network Discovery and Selection Function) Server", HFILL }},
+
+		{ &hf_bootp_option_forcerenew_nonce_algo,
+		  { "Algorithm", "bootp.option.forcerenew_nonce.algorithm",
+		    FT_UINT8, BASE_DEC, VALS(forcerenew_nonce_algo_vals), 0x00,
+		    "Forcenew Nonce Algorithm", HFILL }},
+
+		{ &hf_bootp_option_rdnss_reserved,
+		  { "Reserved", "bootp.option.rdnss.reserved",
+		    FT_UINT8, BASE_HEX, NULL, 0xfc,
+		    "RDNSS Reserved", HFILL }},
+
+		{ &hf_bootp_option_rdnss_pref,
+		  { "Preference", "bootp.option.rdnss.preference",
+		    FT_UINT8, BASE_DEC, VALS(rdnss_pref_vals), 0x03,
+		    "RDNSS (Recursive DNS Server) Preference", HFILL }},
+
+		{ &hf_bootp_option_rdnss_prim_dns_server,
+		  { "Primary DNS", "bootp.option.rdnss.primary_dns",
+		    FT_IPv4, BASE_NONE, NULL, 0x00,
+		    "RDNSS Primary DNS-recursive-name-server's IPv4 address", HFILL }},
+
+		{ &hf_bootp_option_rdnss_sec_dns_server,
+		  { "Secondary DNS", "bootp.option.rdnss.secondary_dns",
+		    FT_IPv4, BASE_NONE, NULL, 0x00,
+		    "RDNSS Secondary DNS-recursive-name-server's IPv4 address", HFILL }},
+
+		{ &hf_bootp_option_rdnss_domain,
+		  { "Domains and networks", "bootp.option.rdnss.domain",
+		    FT_STRING, BASE_NONE, NULL, 0x00,
+		    "RDNSS Domains and networks", HFILL }},
+
 		{ &hf_bootp_option_tftp_server_address,
 		  { "TFTP Server Address", "bootp.option.tftp_server_address",
 		    FT_IPv4, BASE_NONE, NULL, 0x00,
 		    "Option 150: TFTP Server Address", HFILL }},
+
+		{ &hf_bootp_option_bulk_lease_status_code,
+		  { "Status Code", "bootp.option.bulk_lease.status_code",
+		    FT_UINT8, BASE_DEC, VALS(bulk_lease_dhcp_status_code_vals), 0x00,
+		    "DHCPv4 Bulk Leasequery Status Code", HFILL }},
+
+		{ &hf_bootp_option_bulk_lease_status_message,
+		  { "Status Code Message", "bootp.option.bulk_lease.status_code_message",
+		    FT_STRING, BASE_NONE, NULL, 0x00,
+		    "DHCPv4 Bulk Leasequery Status Code Message", HFILL }},
+
+		{ &hf_bootp_option_bulk_lease_base_time,
+		  { "Base Time", "bootp.option.bulk_lease.base_time",
+		    FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x00,
+		    "DHCPv4 Bulk Leasequery Base Time", HFILL }},
+
+		{ &hf_bootp_option_bulk_lease_start_time_of_state,
+		  { "Start Time Of State", "bootp.option.bulk_lease.start_time_of_state",
+		    FT_UINT32, BASE_DEC, NULL, 0x00,
+		    "DHCPv4 Bulk Leasequery Start Time Of State", HFILL }},
+
+		{ &hf_bootp_option_bulk_lease_query_start,
+		  { "Query Start Time", "bootp.option.bulk_lease.query_start_time",
+		    FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x00,
+		    "DHCPv4 Bulk Leasequery Query Start Time", HFILL }},
+
+		{ &hf_bootp_option_bulk_lease_query_end,
+		  { "Query End Time", "bootp.option.bulk_lease.query_end_time",
+		    FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x00,
+		    "DHCPv4 Bulk Leasequery Query End Time", HFILL }},
+
+		{ &hf_bootp_option_bulk_lease_dhcp_state,
+		  { "Dhcp State", "bootp.option.bulk_lease.dhcp_state",
+		    FT_UINT8, BASE_DEC, VALS(bulk_lease_dhcp_state_vals), 0x00,
+		    "DHCPv4 Bulk Leasequery Dhcp State", HFILL }},
+
+		{ &hf_bootp_option_bulk_lease_data_source,
+		  { "Data Source", "bootp.option.bulk_lease.data_source",
+		    FT_BOOLEAN, BASE_NONE, TFS(&tfs_bulk_lease_data_source), 0x00,
+		    "DHCPv4 Bulk Leasequery Data Source", HFILL }},
+
+		{ &hf_bootp_option_pcp_list_length,
+		  { "List-Length", "bootp.option.pcp.list_length",
+		    FT_UINT8, BASE_DEC, NULL, 0x0,
+		    "Port Control Protocol (PCP) List Length", HFILL }},
+
+		{ &hf_bootp_option_pcp_server,
+		  { "PCP Server", "bootp.option.pcp.server",
+		    FT_IPv4, BASE_NONE, NULL, 0x0,
+		    "Port Control Protocol (PCP) Server", HFILL }},
+
+		{ &hf_bootp_option_portparams_offset,
+		  { "Offset", "bootp.option.portparams.offset",
+		    FT_UINT8, BASE_DEC, NULL, 0x0,
+		    "Port Set ID (PSID) offset", HFILL }},
+
+		{ &hf_bootp_option_portparams_psid_length,
+		  { "PSID-Length", "bootp.option.portparams.psid_length",
+		    FT_UINT8, BASE_DEC, NULL, 0x0,
+		    "Port Set ID (PSID) Length", HFILL }},
+
+		{ &hf_bootp_option_portparams_psid,
+		  { "PSID", "bootp.option.portparams.psid",
+		    FT_BYTES, BASE_NONE, NULL, 0x0,
+		    "Port Set ID (PSID)", HFILL }},
 
 		{ &hf_bootp_option_mudurl,
 		  { "MUDURL", "bootp.option.mudurl",
@@ -8847,6 +9226,7 @@ proto_register_bootp(void)
 		&ett_bootp_o43_bsdp_image_desc_list,
 		&ett_bootp_o43_bsdp_image_desc,
 		&ett_bootp_o43_bsdp_attributes_flags,
+		&ett_bootp_option158_pcp_list,
 	};
 
 	static ei_register_info ei[] = {
@@ -8866,6 +9246,7 @@ proto_register_bootp(void)
 		{ &ei_bootp_option_6RD_malformed, { "bootp.option.6RD.malformed", PI_PROTOCOL, PI_ERROR, "6RD: malformed option", EXPFILL }},
 		{ &ei_bootp_option82_vi_cl_tag_unknown, { "bootp.option.option.vi.cl.tag_unknown", PI_PROTOCOL, PI_ERROR, "Unknown tag", EXPFILL }},
 		{ &ei_bootp_option_parse_err, { "bootp.option.parse_err", PI_PROTOCOL, PI_ERROR, "Parse error", EXPFILL }},
+		{ &ei_bootp_nonstd_option_data, { "bootp.option.nonstd_data", PI_PROTOCOL, PI_NOTE, "Non standard compliant option data", EXPFILL }},
 		{ &ei_bootp_suboption_invalid, { "bootp.suboption_invalid", PI_PROTOCOL, PI_ERROR, "Invalid suboption", EXPFILL }},
 		{ &ei_bootp_secs_le, { "bootp.secs_le", PI_PROTOCOL, PI_NOTE, "Seconds elapsed appears to be encoded as little-endian", EXPFILL }},
 		{ &ei_bootp_end_option_missing, { "bootp.end_option_missing", PI_PROTOCOL, PI_ERROR, "End option missing", EXPFILL }},
@@ -8874,7 +9255,8 @@ proto_register_bootp(void)
 		{ &ei_bootp_boot_filename_overloaded_by_dhcp, { "bootp.boot_filename_overloaded_by_dhcp", PI_PROTOCOL, PI_NOTE, "Boot file name option overloaded by DHCP", EXPFILL }},
 		{ &ei_bootp_option_isns_ignored_bitfield, { "bootp.option.isns.ignored_bitfield", PI_PROTOCOL, PI_NOTE, "Enabled field is not set - non-zero bitmask ignored", EXPFILL }},
 		{ &ei_bootp_option242_avaya_l2qvlan_invalid, { "bootp.option.vendor.avaya.l2qvlan.invalid", PI_PROTOCOL, PI_ERROR, "Option 242 (L2QVLAN) invalid", EXPFILL }},
-		{ &ei_bootp_option242_avaya_vlantest_invalid, { "bootp.option.vendor.avaya.vlantest.invalid", PI_PROTOCOL, PI_ERROR, "Option 242 (avaya vlantest) invalid", EXPFILL }}
+		{ &ei_bootp_option242_avaya_vlantest_invalid, { "bootp.option.vendor.avaya.vlantest.invalid", PI_PROTOCOL, PI_ERROR, "Option 242 (avaya vlantest) invalid", EXPFILL }},
+		{ &ei_bootp_option93_client_arch_ambiguous, { "bootp.option.client_architecture.ambiguous", PI_PROTOCOL, PI_WARN, "Client Architecture ID may be ambiguous", EXPFILL }},
 	};
 
 	static tap_param bootp_stat_params[] = {
@@ -9002,6 +9384,7 @@ proto_reg_handoff_bootp(void)
 	dissector_add_uint("bootp.option", 83, create_dissector_handle( dissect_bootpopt_isns, -1 ));
 	dissector_add_uint("bootp.option", 85, create_dissector_handle( dissect_bootpopt_novell_servers, -1 ));
 	dissector_add_uint("bootp.option", 90, create_dissector_handle( dissect_bootpopt_dhcp_authentication, -1 ));
+	dissector_add_uint("bootp.option", 93, create_dissector_handle( dissect_bootpopt_client_architecture, -1 ));
 	dissector_add_uint("bootp.option", 94, create_dissector_handle( dissect_bootpopt_client_network_interface_id, -1 ));
 	dissector_add_uint("bootp.option", 97, create_dissector_handle( dissect_bootpopt_client_identifier_uuid, -1 ));
 	dissector_add_uint("bootp.option", 99, create_dissector_handle( dissect_bootpopt_civic_location, -1 ));
@@ -9015,6 +9398,14 @@ proto_reg_handoff_bootp(void)
 	dissector_add_uint("bootp.option", 123, create_dissector_handle( dissect_bootpopt_coordinate_based_location, -1 ));
 	dissector_add_uint("bootp.option", 124, create_dissector_handle( dissect_bootpopt_vi_vendor_class, -1 ));
 	dissector_add_uint("bootp.option", 125, create_dissector_handle( dissect_bootpopt_vi_vendor_specific_info, -1 ));
+	dissector_add_uint("bootp.option", 145, create_dissector_handle( dissect_bootpopt_forcerenew_nonce, -1 ));
+	dissector_add_uint("bootp.option", 146, create_dissector_handle( dissect_bootpopt_rdnss, -1 ));
+	dissector_add_uint("bootp.option", 151, create_dissector_handle( dissect_bootpopt_bulk_lease_status_code, -1 ));
+	dissector_add_uint("bootp.option", 152, create_dissector_handle( dissect_bootpopt_bulk_lease_base_time, -1 ));
+	dissector_add_uint("bootp.option", 154, create_dissector_handle( dissect_bootpopt_bulk_lease_query_start, -1 ));
+	dissector_add_uint("bootp.option", 155, create_dissector_handle( dissect_bootpopt_bulk_lease_query_end, -1 ));
+	dissector_add_uint("bootp.option", 158, create_dissector_handle( dissect_bootpopt_pcp_server, -1 ));
+	dissector_add_uint("bootp.option", 159, create_dissector_handle( dissect_bootpopt_portparams, -1 ));
 	dissector_add_uint("bootp.option", 160, create_dissector_handle( dissect_bootpopt_dhcp_captive_portal, -1 ));
 	dissector_add_uint("bootp.option", 212, create_dissector_handle( dissect_bootpopt_6RD_option, -1 ));
 	dissector_add_uint("bootp.option", 242, create_dissector_handle( dissect_bootpopt_avaya_ip_telephone, -1 ));

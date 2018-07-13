@@ -11,19 +11,7 @@
  *
  * Copied from packet-tftp.c
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  *
  * the protocol spec at
@@ -129,7 +117,7 @@ void proto_reg_handoff_mysql(void);
 #define MYSQL_RFSH_SLAVE   64  /* Reset master info and restart slave thread */
 #define MYSQL_RFSH_MASTER  128 /* Remove all bin logs in the index and truncate the index */
 
-/* MySQL command codes */
+/* MySQL command codes (enum_server_command in mysql-server.git:include/my_command.h) */
 #define MYSQL_SLEEP               0  /* not from client */
 #define MYSQL_QUIT                1
 #define MYSQL_INIT_DB             2
@@ -159,6 +147,10 @@ void proto_reg_handoff_mysql(void);
 #define MYSQL_STMT_RESET          26
 #define MYSQL_SET_OPTION          27
 #define MYSQL_STMT_FETCH          28
+#define MYSQL_DAEMON              29
+#define MYSQL_BINLOG_DUMP_GTID    30 /* replication */
+#define MYSQL_RESET_CONNECTION    31
+
 
 /* MySQL cursor types */
 
@@ -207,6 +199,7 @@ static const value_string mysql_command_vals[] = {
 	{MYSQL_STMT_RESET, "Reset Statement"},
 	{MYSQL_SET_OPTION, "Set Option"},
 	{MYSQL_STMT_FETCH, "Fetch Data"},
+	{MYSQL_BINLOG_DUMP_GTID, "Send Binlog GTID"},
 	{0, NULL}
 };
 static value_string_ext mysql_command_vals_ext = VALUE_STRING_EXT_INIT(mysql_command_vals);
@@ -1306,7 +1299,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 {
 	gint opcode;
 	gint lenstr;
-	proto_item *tf = NULL, *ti;
+	proto_item *request_item, *tf = NULL, *ti;
 	proto_item *req_tree;
 	guint32 stmt_id;
 	my_stmt_data_t *stmt_data;
@@ -1316,14 +1309,14 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 		return mysql_dissect_auth_switch_response(tvb, pinfo, offset, tree, conn_data);
 	}
 
-	tf = proto_tree_add_item(tree, hf_mysql_request, tvb, offset, 1, ENC_NA);
-	req_tree = proto_item_add_subtree(tf, ett_request);
+	request_item = proto_tree_add_item(tree, hf_mysql_request, tvb, offset, -1, ENC_NA);
+	req_tree = proto_item_add_subtree(request_item, ett_request);
 
 	opcode = tvb_get_guint8(tvb, offset);
 	col_append_fstr(pinfo->cinfo, COL_INFO, " %s", val_to_str_ext(opcode, &mysql_command_vals_ext, "Unknown (%u)"));
 
 	proto_tree_add_item(req_tree, hf_mysql_command, tvb, offset, 1, ENC_NA);
-	proto_item_append_text(tf, " %s", val_to_str_ext(opcode, &mysql_command_vals_ext, "Unknown (%u)"));
+	proto_item_append_text(request_item, " %s", val_to_str_ext(opcode, &mysql_command_vals_ext, "Unknown (%u)"));
 	offset += 1;
 
 
@@ -1454,7 +1447,8 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset,
 
 	case MYSQL_REFRESH:
 		proto_tree_add_bitmask_with_flags(req_tree, tvb, offset,
-hf_mysql_refresh, ett_refresh, mysql_rfsh_flags, ENC_BIG_ENDIAN, BMT_NO_APPEND);
+		    hf_mysql_refresh, ett_refresh, mysql_rfsh_flags,
+		    ENC_BIG_ENDIAN, BMT_NO_APPEND);
 		offset += 1;
 		mysql_set_conn_state(pinfo, conn_data, RESPONSE_OK);
 		break;
@@ -1559,6 +1553,7 @@ hf_mysql_refresh, ett_refresh, mysql_rfsh_flags, ENC_BIG_ENDIAN, BMT_NO_APPEND);
 		mysql_set_conn_state(pinfo, conn_data, RESPONSE_TABULAR);
 		break;
 
+	case MYSQL_BINLOG_DUMP_GTID:
 	case MYSQL_BINLOG_DUMP:
 		proto_tree_add_item(req_tree, hf_mysql_binlog_position, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 		offset += 4;
@@ -1595,6 +1590,7 @@ hf_mysql_refresh, ett_refresh, mysql_rfsh_flags, ENC_BIG_ENDIAN, BMT_NO_APPEND);
 		mysql_set_conn_state(pinfo, conn_data, UNDEFINED);
 	}
 
+	proto_item_set_end(request_item, tvb, offset);
 	return offset;
 }
 

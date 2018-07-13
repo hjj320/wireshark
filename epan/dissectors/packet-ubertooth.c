@@ -7,19 +7,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -1318,7 +1306,7 @@ dissect_usb_rx_packet(proto_tree *main_tree, proto_tree *tree, packet_info *pinf
             proto_tree_add_item(entry_tree, hf_rssi, tvb, offset, 1, ENC_NA);
             offset += 1;
 
-            proto_item_append_text(entry_item, " Frequency = %u MHz, RSSI = %i", tvb_get_ntohs(tvb, offset - 3), (gint8) tvb_get_guint8(tvb, offset - 1));
+            proto_item_append_text(entry_item, " Frequency = %u MHz, RSSI = %i", tvb_get_ntohs(tvb, offset - 3), tvb_get_gint8(tvb, offset - 1));
         }
 
         proto_tree_add_item(data_tree, hf_reserved, tvb, offset, 2, ENC_NA);
@@ -1528,14 +1516,14 @@ dissect_ubertooth(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
                 break;
             case 34: /* LED Spectrum Analyzer */
-                proto_tree_add_int(main_tree, hf_rssi_threshold, tvb, offset, 2, (gint8) tvb_get_letohs(tvb, offset));
-                col_append_fstr(pinfo->cinfo, COL_INFO, " = %i", (gint8) tvb_get_letohs(tvb, offset));
+                proto_tree_add_item(main_tree, hf_rssi_threshold, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+                col_append_fstr(pinfo->cinfo, COL_INFO, " = %i", tvb_get_letohis(tvb, offset));
                 offset += 2;
 
                 break;
             case 36: /* Set Squelch */
                 proto_tree_add_item(main_tree, hf_squelch, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-                col_append_fstr(pinfo->cinfo, COL_INFO, " = %i", (gint16) tvb_get_letohs(tvb, offset));
+                col_append_fstr(pinfo->cinfo, COL_INFO, " = %i", tvb_get_letohis(tvb, offset));
                 offset += 2;
 
                 break;
@@ -1931,7 +1919,7 @@ dissect_ubertooth(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
         break;
     case 37: /* Get Squelch */
         proto_tree_add_item(main_tree, hf_squelch, tvb, offset, 1, ENC_NA);
-        col_append_fstr(pinfo->cinfo, COL_INFO, " = %i", (gint8) tvb_get_guint8(tvb, offset));
+        col_append_fstr(pinfo->cinfo, COL_INFO, " = %i", tvb_get_gint8(tvb, offset));
         offset += 1;
 
         break;

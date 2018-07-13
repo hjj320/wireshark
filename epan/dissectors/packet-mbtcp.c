@@ -46,19 +46,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -1561,20 +1549,24 @@ dissect_modbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
            modbus_conv_data = wmem_new(wmem_file_scope(), modbus_conversation);
            modbus_conv_data->modbus_request_frame_data = wmem_list_new(wmem_file_scope());
            modbus_conv_data->register_format = global_mbus_register_format;
-           pkt_info->register_format = global_mbus_register_format;
            conversation_add_proto_data(conversation, proto_modbus, (void *)modbus_conv_data);
         }
 
+        pkt_info->register_format = modbus_conv_data->register_format;
 
         if (*packet_type == QUERY_PACKET) {
             /*create the modbus_request frame. It holds the request information.*/
-            modbus_request_info_t    *frame_ptr = wmem_new(wmem_file_scope(), modbus_request_info_t);
+            modbus_request_info_t    *frame_ptr = wmem_new0(wmem_file_scope(), modbus_request_info_t);
+            gint captured_length = tvb_captured_length(tvb);
 
             /* load information into the modbus request frame */
             frame_ptr->fnum = pinfo->num;
             frame_ptr->function_code = function_code;
-            pkt_info->reg_base = frame_ptr->base_address = tvb_get_ntohs(tvb, 1);
-            pkt_info->num_reg = frame_ptr->num_reg = tvb_get_ntohs(tvb, 3);
+            if (captured_length >= 3) {
+                pkt_info->reg_base = frame_ptr->base_address = tvb_get_ntohs(tvb, 1);
+                if (captured_length >= 5)
+                    pkt_info->num_reg = frame_ptr->num_reg = tvb_get_ntohs(tvb, 3);
+            }
 
             wmem_list_prepend(modbus_conv_data->modbus_request_frame_data, frame_ptr);
         }

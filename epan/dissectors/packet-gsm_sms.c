@@ -18,19 +18,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -42,6 +30,7 @@
 #include <epan/reassemble.h>
 #include <epan/charsets.h>
 #include <epan/proto_data.h>
+#include "packet-e164.h"
 #include <epan/asn1.h>
 #include "packet-gsm_sms.h"
 #include "packet-gsm_map.h"
@@ -444,9 +433,7 @@ static void
 sm_fragment_free_temporary_key(gpointer ptr)
 {
     sm_fragment_key *key = (sm_fragment_key *)ptr;
-
-    if(key)
-        g_slice_free(sm_fragment_key, key);
+    g_slice_free(sm_fragment_key, key);
 }
 
 static void
@@ -601,7 +588,7 @@ dis_field_addr(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, guint32 *off
     static gchar digit_table[] = {"0123456789*#abc\0"};
     proto_item  *item;
     proto_tree  *subtree;
-    guint8       oct;
+    guint8       oct, nt_mp;
     guint32      offset;
     guint32      numdigocts;
     guint32      length, addrlength;
@@ -633,6 +620,7 @@ dis_field_addr(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, guint32 *off
 
     offset++;
     oct = tvb_get_guint8(tvb, offset);
+    nt_mp = oct & 0x7f;
 
     proto_tree_add_item(subtree, hf_gsm_sms_dis_field_addr_extension, tvb, offset, 1, ENC_NA);
     proto_tree_add_item(subtree, hf_gsm_sms_dis_field_addr_num_type, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -663,11 +651,19 @@ dis_field_addr(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, guint32 *off
     if (g_ascii_strncasecmp(title, "TP-O", 4) == 0) {
         proto_tree_add_string(subtree, hf_gsm_sms_tp_oa, tvb,
                 offset, numdigocts, addrstr);
+        if (((nt_mp >> 4) == 1) && ((nt_mp & 0x0f) == 1)) {
+            /* if Type of number international and number plan is E.164*/
+            dissect_e164_msisdn(tvb, subtree, offset, numdigocts, E164_ENC_BCD);
+        }
         p_add_proto_data(pinfo->pool, pinfo, proto_gsm_sms, 0,
                          wmem_strdup(pinfo->pool, addrstr));
     } else if (g_ascii_strncasecmp(title, "TP-D", 4) == 0) {
         proto_tree_add_string(subtree, hf_gsm_sms_tp_da, tvb,
                 offset, numdigocts, addrstr);
+        if (((nt_mp >> 4) == 1) && ((nt_mp & 0x0f) == 1)) {
+            /* if Type of number international and number plan is E.164*/
+            dissect_e164_msisdn(tvb, subtree, offset, numdigocts, E164_ENC_BCD);
+        }
         p_add_proto_data(pinfo->pool, pinfo, proto_gsm_sms, 0,
                          wmem_strdup(pinfo->pool, addrstr));
     } else if (g_ascii_strncasecmp(title, "TP-R", 4) == 0) {
@@ -782,7 +778,7 @@ dis_field_pid(tvbuff_t *tvb, proto_tree *tree, guint32 offset, guint8 oct)
 static const value_string dcs_character_set_vals[] = {
    {0x00,    "GSM 7 bit default alphabet"},
    {0x01,    "8 bit data"},
-   {0x02,    "UCS2 (16 bit)"},
+   {0x02,    "UCS2 (16 bit)/UTF-16"},
    {0x03,    "Reserved"},
    {0,      NULL }
 };
@@ -926,27 +922,27 @@ dis_field_scts_aux(tvbuff_t *tvb, proto_tree *tree, guint32 offset)
     char   sign;
 
     oct = tvb_get_guint8(tvb, offset);
-    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4),
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
     proto_tree_add_uint(tree, hf_gsm_sms_scts_year, tvb, offset, 1, value);
     offset++;
     oct = tvb_get_guint8(tvb, offset);
-    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4),
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
     proto_tree_add_uint(tree, hf_gsm_sms_scts_month, tvb, offset, 1, value);
     offset++;
     oct = tvb_get_guint8(tvb, offset);
-    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4),
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
     proto_tree_add_uint(tree, hf_gsm_sms_scts_day, tvb, offset, 1, value);
     offset++;
     oct = tvb_get_guint8(tvb, offset);
-    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4),
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
     proto_tree_add_uint(tree, hf_gsm_sms_scts_hour, tvb, offset, 1, value);
     offset++;
     oct = tvb_get_guint8(tvb, offset);
-    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4),
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
     proto_tree_add_uint(tree, hf_gsm_sms_scts_minutes, tvb, offset, 1, value);
     offset++;
     oct = tvb_get_guint8(tvb, offset);
-    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4),
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
     proto_tree_add_uint(tree, hf_gsm_sms_scts_seconds, tvb, offset, 1, value);
     offset++;
 
@@ -1081,15 +1077,15 @@ dis_field_vp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, guint32 *offse
             case 0x03:
                 offset++;
                 oct = tvb_get_guint8(tvb, offset);
-                value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4),
+                value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
                 proto_tree_add_uint(subtree, hf_gsm_sms_vp_validity_period_hour, tvb, offset, 1, value);
                 offset++;
                 oct = tvb_get_guint8(tvb, offset);
-                value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4),
+                value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
                 proto_tree_add_uint(subtree, hf_gsm_sms_vp_validity_period_minutes, tvb, offset, 1, value);
                 offset++;
                 oct = tvb_get_guint8(tvb, offset);
-                value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4),
+                value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
                 proto_tree_add_uint(subtree, hf_gsm_sms_vp_validity_period_seconds, tvb, offset, 1, value);
                 offset++;
                 done = TRUE;
@@ -2207,9 +2203,13 @@ dis_field_ud(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset
 
                 if (!(reassembled && pinfo->num == reassembled_in))
                 {
-                    /* Show unreassembled SMS */
+                    /* Show unreassembled SMS
+                     * Decode as ENC_UTF_16 instead of UCS2 because Android and iOS smartphones
+                     * encode emoji characters as UTF-16 big endian and although the UTF-16
+                     * is not specified in the 3GPP 23.038 (GSM 03.38) it seems to be widely supported
+                     */
                     proto_tree_add_item(subtree, hf_gsm_sms_text, sm_tvb,
-                                        0, rep_len, ENC_UCS_2|ENC_BIG_ENDIAN);
+                                        0, rep_len, ENC_UTF_16|ENC_BIG_ENDIAN);
                 } else {
                     /*  Show reassembled SMS.  We show each fragment separately
                      *  so that the text doesn't get truncated when we add it to
@@ -2227,9 +2227,13 @@ dis_field_ud(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset
                                                                              &frag_params_key);
 
                         if (p_frag_params) {
+                            /* Decode as ENC_UTF_16 instead of UCS2 because Android and iOS smartphones
+                             * encode emoji characters as UTF-16 big endian and although the UTF-16
+                             * is not specified in the 3GPP 23.038 (GSM 03.38) it seems to be widely supported
+                             */
                             proto_tree_add_item(subtree, hf_gsm_sms_text, sm_tvb, total_sms_len,
                                 (p_frag_params->udl > SMS_MAX_MESSAGE_SIZE ? SMS_MAX_MESSAGE_SIZE : p_frag_params->udl),
-                                ENC_UCS_2|ENC_BIG_ENDIAN);
+                                ENC_UTF_16|ENC_BIG_ENDIAN);
 
                             total_sms_len += p_frag_params->length;
                         }

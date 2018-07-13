@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -77,6 +65,7 @@ void proto_reg_handoff_pim(void);
 #define PIM_HELLO_VPC_PEER_ID 33    /* 2 vPC Peer ID */
 #define PIM_HELLO_DR_LB_CAPA 34     /* variable DR Load Balancing Capability [draft-ietf-pim-drlb] */
 #define PIM_HELLO_LB_GDR 35         /* variable DR Load Balancing GDR (LBGDR) [draft-ietf-pim-drlb] */
+#define PIM_HELLO_RPF_PROXY 65004   /* RPF Proxy Vector (Cisco proprietary) */
 
 /* PIM BIDIR DF election messages */
 
@@ -120,6 +109,7 @@ static const value_string pim_opt_vals[] = {
     {22, "Bidir Capable"},
     {24, "Address List"},
     {65001, "Address List"},    /* old implementation */
+    {65004, "RPF Proxy Vector"},
     {0, NULL}
 };
 
@@ -638,7 +628,7 @@ static gboolean
 dissect_pim_addr(proto_tree* tree, tvbuff_t *tvb, int offset, enum pimv2_addrtype at,
                  const char* label, proto_item** ret_item, int hf_ip4, int hf_ip6, int *advance) {
     guint8 af, et, flags, mask_len;
-    struct e_in6_addr ipv6;
+    ws_in6_addr ipv6;
     guint32 ipv4;
     proto_item* ti = NULL;
     int len = 0;
@@ -1013,6 +1003,7 @@ dissect_pim(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             case PIM_HELLO_VPC_PEER_ID:
             case PIM_HELLO_DR_LB_CAPA:
             case PIM_HELLO_LB_GDR:
+            case PIM_HELLO_RPF_PROXY:
             default:
                 if (opt_len)
                     proto_tree_add_item(opt_tree, hf_pim_optionvalue, tvb,

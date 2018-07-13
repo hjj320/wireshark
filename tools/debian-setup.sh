@@ -5,19 +5,7 @@
 # By Gerald Combs <gerald@wireshark.org>
 # Copyright 1998 Gerald Combs
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+# SPDX-License-Identifier: GPL-2.0-or-later
 #
 # We drag in tools that might not be needed by all users; it's easier
 # that way.
@@ -40,7 +28,7 @@ then
 	exit 1
 fi
 
-for op in $@
+for op
 do
 	if [ "$op" = "--install-optional" ]
 	then
@@ -50,15 +38,39 @@ do
 	fi
 done
 
-BASIC_LIST="libgtk2.0-dev libpcap-dev bison flex make automake \
-	libtool python perl libgcrypt-dev"
+BASIC_LIST="qttools5-dev \
+	qttools5-dev-tools \
+	libqt5svg5-dev \
+	qtmultimedia5-dev \
+	qt5-default \
+	libpcap-dev \
+	bison \
+	flex \
+	make \
+	cmake \
+	python \
+	perl \
+	libgcrypt-dev"
 
-ADDITIONAL_LIST="libnl-3-dev qttools5-dev qttools5-dev-tools libgtk-3-dev \
-		libc-ares-dev libkrb5-dev libqt5svg5-dev lynx libsmi2-dev \
-		portaudio19-dev asciidoc libsbc-dev libgeoip-dev \
-		qtmultimedia5-dev liblua5.2-dev libnl-cli-3-dev \
-		libparse-yapp-perl qt5-default cmake libcap-dev \
-		liblz4-dev libsnappy-dev libspandsp-dev libxml2-dev"
+ADDITIONAL_LIST="libnl-3-dev \
+	libc-ares-dev \
+	libkrb5-dev \
+	libsmi2-dev \
+	asciidoctor \
+	libsbc-dev \
+	liblua5.2-dev \
+	libnl-cli-3-dev \
+	libparse-yapp-perl \
+	libcap-dev \
+	liblz4-dev \
+	libsnappy-dev \
+	libspandsp-dev \
+	libxml2-dev \
+	git \
+	libjson-glib-dev \
+	ninja-build \
+	doxygen \
+	xsltproc"
 
 # Adds package $2 to list variable $1 if the package is found
 add_package() {
@@ -70,10 +82,6 @@ add_package() {
 	# package is found, append it to list
 	eval "${list}=\"\${${list}} \${pkgname}\""
 }
-
-# only needed for newer distro versions where "libtool" binary is separated.
-# Debian >= jessie, Ubuntu >= 16.04
-add_package BASIC_LIST libtool-bin
 
 # Debian >= wheezy-backports, Ubuntu >= 16.04
 add_package ADDITIONAL_LIST libnghttp2-dev ||
@@ -90,6 +98,10 @@ echo "libssh-gcrypt-dev and libssh-dev are unavailable" >&2
 add_package ADDITIONAL_LIST libgnutls28-dev ||
 add_package ADDITIONAL_LIST libgnutls-dev ||
 echo "libgnutls28-dev and libgnutls-dev are unavailable" >&2
+
+# mmdbresolve
+add_package ADDITIONAL_LIST libmaxminddb-dev ||
+echo "libmaxminddb-dev is unavailable" >&2
 
 ACTUAL_LIST=$BASIC_LIST
 

@@ -14,19 +14,7 @@
  *
  * Copied from packet-m3ua.c
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 
@@ -374,8 +362,8 @@ dissect_v2_message_data(tvbuff_t *message_tvb, packet_info *pinfo, proto_item *m
   guint16 type;
   tvbuff_t *message_data_tvb;
 
-  message_data_length = (gint) tvb_get_ntohl(message_tvb, V2_LENGTH_OFFSET);
-  if ((gint) message_data_length < 1) {
+  message_data_length = tvb_get_ntohl(message_tvb, V2_LENGTH_OFFSET);
+  if (message_data_length < 1 || message_data_length > G_MAXINT) {
     proto_tree_add_expert_format(m2pa_tree, pinfo, &ei_length, message_tvb, V2_LENGTH_OFFSET, 4,
         "Invalid message data length: %u", message_data_length);
     return;
@@ -406,7 +394,7 @@ dissect_v8_message_data(tvbuff_t *message_tvb, packet_info *pinfo, proto_item *m
   tvbuff_t *message_data_tvb;
 
   message_data_length = tvb_get_ntohl(message_tvb, V8_LENGTH_OFFSET) - V8_HEADER_LENGTH;
-  if ((gint) message_data_length < 1) {
+  if (message_data_length < 1 || message_data_length > G_MAXINT) {
     proto_tree_add_expert_format(m2pa_tree, pinfo, &ei_length, message_tvb, V8_LENGTH_OFFSET, 4,
         "Invalid message data length: %u", message_data_length);
     return;

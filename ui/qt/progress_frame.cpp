@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -31,7 +19,7 @@
 #include <QBoxLayout>
 #include <QPropertyAnimation>
 
-#include "stock_icon_tool_button.h"
+#include <ui/qt/widgets/stock_icon_tool_button.h>
 #include "wireshark_application.h"
 
 // To do:
@@ -103,11 +91,9 @@ ProgressFrame::ProgressFrame(QWidget *parent) :
     ui(new Ui::ProgressFrame)
   , terminate_is_stop_(false)
   , stop_flag_(NULL)
-#if !defined(Q_OS_MAC) || QT_VERSION > QT_VERSION_CHECK(5, 0, 0)
   , show_timer_(-1)
   , effect_(NULL)
   , animation_(NULL)
-#endif
 #ifdef QWINTASKBARPROGRESS_H
   , update_taskbar_(false)
   , taskbar_progress_(NULL)
@@ -143,11 +129,8 @@ ProgressFrame::ProgressFrame(QWidget *parent) :
             "}"
             );
 
-#if !defined(Q_OS_MAC) || QT_VERSION > QT_VERSION_CHECK(5, 0, 0)
     effect_ = new QGraphicsOpacityEffect(this);
     animation_ = new QPropertyAnimation(effect_, "opacity", this);
-#endif
-
     connect(this, SIGNAL(showRequested(bool,bool,gboolean*)),
             this, SLOT(show(bool,bool,gboolean*)));
     hide();
@@ -231,7 +214,6 @@ void ProgressFrame::setValue(int value)
     emit valueChanged(value);
 }
 
-#if !defined(Q_OS_MAC) || QT_VERSION > QT_VERSION_CHECK(5, 0, 0)
 void ProgressFrame::timerEvent(QTimerEvent *event)
 {
     if (event->timerId() == show_timer_) {
@@ -251,13 +233,10 @@ void ProgressFrame::timerEvent(QTimerEvent *event)
         QFrame::timerEvent(event);
     }
 }
-#endif
 
 void ProgressFrame::hide()
 {
-#if !defined(Q_OS_MAC) || QT_VERSION > QT_VERSION_CHECK(5, 0, 0)
     show_timer_ = -1;
-#endif
     emit setHidden();
     QFrame::hide();
 #ifdef QWINTASKBARPROGRESS_H
@@ -274,9 +253,7 @@ void ProgressFrame::on_stopButton_clicked()
     emit stopLoading();
 }
 
-#if !defined(Q_OS_MAC) || QT_VERSION > QT_VERSION_CHECK(5, 0, 0)
 const int show_delay_ = 500; // ms
-#endif
 
 void ProgressFrame::show(bool animate, bool terminate_is_stop, gboolean *stop_flag)
 {
@@ -289,16 +266,11 @@ void ProgressFrame::show(bool animate, bool terminate_is_stop, gboolean *stop_fl
         ui->stopButton->hide();
     }
 
-#if !defined(Q_OS_MAC) || QT_VERSION > QT_VERSION_CHECK(5, 0, 0)
     if (animate) {
         show_timer_ = startTimer(show_delay_);
     } else {
         QFrame::show();
     }
-#else
-    Q_UNUSED(animate)
-    QFrame::show();
-#endif
 
 #ifdef QWINTASKBARPROGRESS_H
     // windowHandle() is picky about returning a non-NULL value so we check it

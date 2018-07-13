@@ -7,19 +7,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -510,11 +498,7 @@ static int dissect_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 			conversation_add_proto_data(conversation, proto_synphasor, frame);
 		}
 		else if (DATA == frame_type) {
-			conversation_t *conversation = find_conversation(pinfo->num,
-									 &pinfo->src, &pinfo->dst,
-									 pinfo->ptype,
-									 pinfo->srcport, pinfo->destport,
-									 0);
+			conversation_t *conversation = find_conversation_pinfo(pinfo, 0);
 
 			if (conversation) {
 				config_frame *conf = (config_frame *)conversation_get_proto_data(conversation, proto_synphasor);
@@ -735,7 +719,7 @@ static int dissect_config_frame(tvbuff_t *tvb, proto_item *config_item)
 
 	/* DATA_RATE */
 	{
-		gint16 tmp = tvb_get_ntohs(tvb, offset);
+		gint16 tmp = tvb_get_ntohis(tvb, offset);
 		if (tmp > 0)
 			proto_tree_add_int_format_value(config_tree, hf_synphasor_rate_of_transmission, tvb, offset, 2, tmp,
                         "%d frame(s) per second", tmp);
@@ -897,8 +881,8 @@ static int dissect_single_phasor(tvbuff_t *tvb, int offset,
 	else {
 		if (polar == notation) {
 			/* int, polar */
-			*mag	= (guint16)tvb_get_ntohs(tvb, offset	);
-			*phase	= (gint16) tvb_get_ntohs(tvb, offset + 2);
+			*mag	= tvb_get_ntohs(tvb, offset	);
+			*phase	= tvb_get_ntohis(tvb, offset + 2);
 			*phase /= 10000.0; /* angle is in radians*10^4 */
 		}
 		else {

@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -933,7 +921,7 @@ static void dissect_apci(tvbuff_t *tvb, guint32 *offset, proto_tree *insert_tree
         switch (type){
             case(A_ADC_RED):
             case(A_ADC_RES):
-                type = (tvb_get_ntohs(tvb, *offset) & 0x2FF);
+                type = (tvb_get_ntohs(tvb, *offset) & 0x1FF);
                 if (type == A_SYS_RED || type == A_SYS_RES || type == A_SYS_WRT || type == A_SYS_BROAD){
                     proto_tree_add_bits_item(insert_tree, hf_knxnetip_cemi_apci, tvb, (*offset*8)+6, 10, ENC_BIG_ENDIAN);
                 }

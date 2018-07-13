@@ -3,24 +3,13 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 2001 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
 
 #include <ftypes-int.h>
+#include <epan/strutil.h>
 #include <epan/to_str-int.h>
 #include <string.h>
 
@@ -53,14 +42,9 @@ value_set(fvalue_t *fv, tvbuff_t *value, const gchar *name)
 	/* Free up the old value, if we have one */
 	value_free(fv);
 
+	/* Set the protocol description and an (optional, nullable) tvbuff. */
 	fv->value.protocol.tvb = value;
 	fv->value.protocol.proto_string = g_strdup(name);
-}
-
-static void
-free_tvb_data(void *data)
-{
-	g_free(data);
 }
 
 static gboolean
@@ -79,43 +63,46 @@ val_from_string(fvalue_t *fv, const char *s, gchar **err_msg _U_)
 			(guint)strlen(s), (gint)strlen(s));
 
 	/* Let the tvbuff know how to delete the data. */
-	tvb_set_free_cb(new_tvb, free_tvb_data);
+	tvb_set_free_cb(new_tvb, g_free);
 
 	/* And let us know that we need to free the tvbuff */
 	fv->tvb_is_private = TRUE;
+	/* This "field" is a value, it has no protocol description. */
 	fv->value.protocol.tvb = new_tvb;
-	fv->value.protocol.proto_string = g_strdup(s);
+	fv->value.protocol.proto_string = NULL;
 	return TRUE;
 }
 
 static gboolean
 val_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
 {
-	fvalue_t *fv_bytes;
 	tvbuff_t *new_tvb;
-	guint8 *private_data;
 
 	/* Free up the old value, if we have one */
 	value_free(fv);
+	fv->value.protocol.tvb = NULL;
+	fv->value.protocol.proto_string = NULL;
 
 	/* Does this look like a byte string? */
-	fv_bytes = fvalue_from_unparsed(FT_BYTES, s, TRUE, NULL);
-	if (fv_bytes) {
+	GByteArray *bytes = g_byte_array_new();
+	if (hex_str_to_bytes(s, bytes, TRUE)) {
 		/* Make a tvbuff from the bytes */
-		private_data = (guint8 *)g_memdup(fv_bytes->value.bytes->data,
-				fv_bytes->value.bytes->len);
-		new_tvb = tvb_new_real_data(private_data,
-				fv_bytes->value.bytes->len,
-				fv_bytes->value.bytes->len);
+		new_tvb = tvb_new_real_data(bytes->data, bytes->len, bytes->len);
 
 		/* Let the tvbuff know how to delete the data. */
-		tvb_set_free_cb(new_tvb, free_tvb_data);
+		tvb_set_free_cb(new_tvb, g_free);
+
+		/* Free GByteArray, but keep data. */
+		g_byte_array_free(bytes, FALSE);
 
 		/* And let us know that we need to free the tvbuff */
 		fv->tvb_is_private = TRUE;
 		fv->value.protocol.tvb = new_tvb;
 		return TRUE;
 	}
+
+	/* Not a byte array, forget about it. */
+	g_byte_array_free(bytes, TRUE);
 
 	/* Treat it as a string. */
 	return val_from_string(fv, s, err_msg);

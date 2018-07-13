@@ -9,19 +9,7 @@
 # By Gerald Combs <gerald@wireshark.org>
 # Copyright 1998 Gerald Combs
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 # Directory containing tshark or wireshark.  Default current directory.
 if [ -z "$WIRESHARK_BIN_DIR" ]; then
@@ -66,9 +54,6 @@ while getopts ":2a:b:C:lmnpP:rstTYwcevWdG" OPTCHAR ; do
         W) COMMAND=wireshark
            COMMAND_ARGS=""
            VALID=1 ;;
-        G) COMMAND=wireshark-gtk
-           COMMAND_ARGS=""
-           VALID=1 ;;
         d) COMMAND=dumpcap
            COMMAND_ARGS="-i eth1 -c 3000"
            VALID=1 ;;
@@ -102,7 +87,7 @@ then
     printf "[-e]: use 'editcap -E 0.02' instead of tshark\n"
     printf "[-c]: use capinfos instead of tshark\n"
     printf "[-C]: binary profile file\n"
-    printf "[-l]: add valgring option --leak-check=full\n"
+    printf "[-l]: add valgrind option --leak-check=full\n"
     printf "[-m]: use valgrind massif tool\n"
     printf "[-n]: print binary version\n"
     printf "[-p]: use callgrind massif tool\n"
@@ -138,7 +123,6 @@ else
 fi
 
 cmdline="$LIBTOOL valgrind --suppressions=`dirname $0`/vg-suppressions $ADDITIONAL_SUPPRESSION_FILE \
---suppressions=`dirname $0`/gtk.suppression \
 --tool=$TOOL $CALLGRIND_OUT_FILE $VERBOSE $LEAK_CHECK $REACHABLE $GEN_SUPPRESSIONS $TRACK_ORIGINS \
 $COMMAND $COMMAND_ARGS $PCAP $COMMAND_ARGS2"
 

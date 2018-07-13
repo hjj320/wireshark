@@ -1,4 +1,4 @@
--- 3GPP TS 25.331 V13.5.0 (2016-12)
+-- 3GPP TS 25.331 V15.2.0 (2018-03)
 --
 -- 11.3	Information element definitions
 --
@@ -800,7 +800,7 @@ AccessGroupIdentity ::=				INTEGER (0..15)
 AccessStratumReleaseIndicator ::=	ENUMERATED {
 										rel-4, rel-5, rel-6, rel-7, rel-8,
 										rel-9, rel-10, rel-11, rel-12,
-										rel-13,	spare6,	spare5, spare4, spare3,
+										rel-13, rel-14, spare5, spare4, spare3,
 										spare2, spare1 }
 
 -- TABULAR : for ActivationTime, value 'now' always appear as default, and is encoded
@@ -906,8 +906,16 @@ CellUpdateCause-ext ::=				ENUMERATED {
 										mbms-Reception,
 										mbms-PTP-RB-Request,
 										dummy,
-										spare1 }
+										cellUpdateCause-ext2 }
 
+-- The IE CellUpdateCause-ext2 shall be present, if the IE CellUpdateCause-ext has the
+-- value 'cellUpdateCause-ext2'.
+
+CellUpdateCause-ext2 ::=			ENUMERATED {
+										applicationLayerMeasurementReportAvailable,
+										spare3,
+										spare2,
+										spare1 }
 
 ChipRateCapability ::=				ENUMERATED {
 										mcps3-84, mcps1-28 }
@@ -1206,6 +1214,10 @@ DL-PhysChCapabilityFDD-vc50ext ::=		SEQUENCE {
 DL-PhysChCapabilityFDD-vd20ext ::=	SEQUENCE {
 	supportofPowerControlAlgorithm3			ENUMERATED { true }				OPTIONAL,
 	supportofBlindHarqRetransmissionsforHsdpa		ENUMERATED { true }				OPTIONAL
+}
+
+DL-PhysChCapabilityFDD-ve30ext ::=	SEQUENCE {
+	supportofHS-SCCHDrxOperation			ENUMERATED { true }				OPTIONAL
 }
 
 DL-PhysChCapabilityTDD ::=		SEQUENCE {
@@ -1726,6 +1738,11 @@ MeasurementCapability-vc50ext ::=	SEQUENCE {
 	enhancedUPHReporting							ENUMERATED { true }		OPTIONAL
 }
 
+MeasurementCapability-ve30ext ::=	SEQUENCE {
+	rrcEventsforUPHReporting							ENUMERATED { true }			OPTIONAL,
+	qoEMeasurementCollectionForStreamingServices	ENUMERATED { true }			OPTIONAL
+}
+
 MessageAuthenticationCode ::=		BIT STRING (SIZE (32))
 
 MinimumSF-DL ::=					ENUMERATED {
@@ -2048,6 +2065,12 @@ PhysicalChannelCapability-vd20ext ::=	SEQUENCE {
 	fddPhysChCapability						SEQUENCE {
 		downlinkPhysChCapability					DL-PhysChCapabilityFDD-vd20ext	OPTIONAL,
 		uplinkPhysChCapability					UL-PhysChCapabilityFDD-vd20ext	OPTIONAL
+	}		OPTIONAL
+}
+PhysicalChannelCapability-ve30ext ::=	SEQUENCE {
+	fddPhysChCapability						SEQUENCE {
+		downlinkPhysChCapability					DL-PhysChCapabilityFDD-ve30ext	OPTIONAL,
+		uplinkPhysChCapability					UL-PhysChCapabilityFDD-ve30ext	OPTIONAL
 	}		OPTIONAL
 }
 
@@ -2421,6 +2444,24 @@ SecondaryEDCH-Info-Common-r12 ::=	SEQUENCE {
 	dpcchPowerOffset-SecondaryULFrequency	INTEGER(0..7),
 	pc-Preamble							PC-Preamble,
 	ue-DPCCHPowerResetAfterDTXOnSecUplink	UE-DPCCHPowerResetAfterDTXOnSecUplink	OPTIONAL
+}
+
+SecondaryEDCH-Info-Common-r14 ::=	SEQUENCE {
+	frequencyInfo							FrequencyInfo,
+	scramblingCodeType						ScramblingCodeType,
+	scramblingCodeNumber					UL-ScramblingCode,
+	ms2-SchedTransmGrantHARQAlloc		BIT STRING (SIZE (8))						OPTIONAL,
+	servingGrant							SEQUENCE {
+		primary-Secondary-GrantSelector		ENUMERATED { primary, secondary }
+	}		OPTIONAL,
+	minReduced-E-DPDCH-GainFactor		MinReduced-E-DPDCH-GainFactor			OPTIONAL,
+	e-DCH-minimumSet-E-TFCI				E-DCH-MinimumSet-E-TFCI					OPTIONAL,
+	minimumTEBS-threshold					MinimumTEBS-threshold						OPTIONAL,
+	implicitGrantHandling					ENUMERATED { true }						OPTIONAL,
+	dpcchPowerOffset-SecondaryULFrequency	INTEGER(0..7),
+	pc-Preamble							PC-Preamble,
+	ue-DPCCHPowerResetAfterDTXOnSecUplink	UE-DPCCHPowerResetAfterDTXOnSecUplink	OPTIONAL,
+	additionalSecondaryCellInfoForMixedTTIConfiguration				AdditionalSecondaryCellInfoForMixedTTIConfiguration				OPTIONAL
 }
 
 Serving-HSDSCH-CellInformation ::=	SEQUENCE {
@@ -2885,8 +2926,8 @@ UE-RadioAccessCapability-LaterNonCriticalExtensions ::=	SEQUENCE {
 								vd20NonCriticalExtensions			SEQUENCE {
 									ue-RadioAccessCapability-vd20ext 
 											UE-RadioAccessCapability-vd20ext-IEs,
-									nonCriticalExtensions			SEQUENCE {} OPTIONAL	
-								} 		OPTIONAL
+									ve30NonCriticalExtensions		UE-RadioAccessCapability-ve30ext-IEs OPTIONAL
+								}		OPTIONAL
 							}		OPTIONAL
 						}		OPTIONAL
 					}		OPTIONAL
@@ -2987,6 +3028,28 @@ UE-RadioAccessCapability-vd20ext-IEs ::=		SEQUENCE {
 	supportofURAPCHwithSeamlessTransition		ENUMERATED { true }						OPTIONAL,
 	supportofImprovedSynchronizedRRCProcedures	ENUMERATED { true }						OPTIONAL, 
 	supportofEnhancedStateTransition			ENUMERATED { true }						OPTIONAL
+}
+
+UE-RadioAccessCapability-ve30ext-IEs ::=		SEQUENCE { 
+	measurementCapability							MeasurementCapability-ve30ext		OPTIONAL,
+	supportofSimultaneousSetupandReleaseofRABsRBs	ENUMERATED { true }					OPTIONAL,
+	physicalChannelCapability						PhysicalChannelCapability-ve30ext	OPTIONAL,
+	ue-RadioAccessCapability-vf10ext    		UE-RadioAccessCapability-vf10ext-IEs    OPTIONAL
+}
+
+UE-RadioAccessCapability-vf10ext-IEs ::=		SEQUENCE { 
+	physicalChannelCapability					PhysicalChannelCapability-vf10ext   OPTIONAL,
+	nonCriticalExtensions						SEQUENCE {}							OPTIONAL
+
+}
+PhysicalChannelCapability-vf10ext ::=	SEQUENCE {
+	fddPhysChCapability						SEQUENCE {
+		downlinkPhysChCapability					DL-PhysChCapabilityFDD-vf10ext	OPTIONAL
+		}
+}
+
+DL-PhysChCapabilityFDD-vf10ext ::=	SEQUENCE {
+	supportofSimplifiedHS-SCCHType1Operation			     ENUMERATED { true }			OPTIONAL
 }
 
 UE-ConnTimersAndConstants ::=		SEQUENCE {
@@ -3256,7 +3319,7 @@ UE-RadioAccessCapability-vd20ext ::= SEQUENCE {
 
 UE-RadioAccessCapabBand-va40ext ::= SEQUENCE {
 	ue-RadioAccessCapabBandFDDList5				UE-RadioAccessCapabBandFDDList5,
-	-- This IE shall be included if the UE also supports Band I ñ Band XXII
+	-- This IE shall be included if the UE also supports Band I ‚Äì Band XXII
 	ue-RadioAccessCapabBandFDDList-ext2			UE-RadioAccessCapabBandFDDList-ext2		OPTIONAL
 }
 
@@ -3682,6 +3745,10 @@ UL-PhysChCapabilityFDD-vd20ext ::=		SEQUENCE {
 	supportOfDualCellEDCHwithDPDCH			ENUMERATED { true }				OPTIONAL
 }
 
+UL-PhysChCapabilityFDD-ve30ext ::=		SEQUENCE {
+	supportOfDualCellEDCHOperationEnhancements			ENUMERATED { true }				OPTIONAL
+}
+
 UL-PhysChCapabilityTDD ::=			SEQUENCE {
 	maxTS-PerFrame						MaxTS-PerFrame,
 	maxPhysChPerTimeslot				MaxPhysChPerTimeslot,
@@ -3751,6 +3818,17 @@ UL-OtherTTIConfiguration-Information ::= SEQUENCE {
 	activationDelay				ActivationDelay									OPTIONAL
 }
 
+UL-OtherTTIConfigurationInfo-Sec ::= SEQUENCE {
+	configurationInfo			CHOICE {
+		continue							NULL,
+		newConfiguration					SEQUENCE {
+			secondaryEDCH-Info-Common			SecondaryEDCH-Info-Common-r14,
+			ul-AddReconfTransChInfoList		UL-AddReconfTransChInfoList-r14
+		}
+	},
+	activationDelay				ActivationDelay									OPTIONAL
+}
+
 UL-SecondaryCellInfoFDD ::=		CHOICE {
 	continue							NULL,
 	newConfiguration					SEQUENCE {
@@ -3774,6 +3852,15 @@ UL-SecondaryCellInfoFDD-r13 ::=		CHOICE {
 	newConfiguration					SEQUENCE {
 		secondaryServingEDCHCell-Info		SecondaryServingEDCHCell-Info			OPTIONAL,
 		secondaryEDCH-Info-Common			SecondaryEDCH-Info-Common-r12			OPTIONAL,
+		dl-InformationPerSecondaryRL-List	DL-InformationPerSecondaryRL-List-r13	OPTIONAL
+	}
+}
+
+UL-SecondaryCellInfoFDD-r14 ::=		CHOICE {
+	continue							NULL,
+	newConfiguration					SEQUENCE {
+		secondaryServingEDCHCell-Info		SecondaryServingEDCHCell-Info			OPTIONAL,
+		secondaryEDCH-Info-Common			SecondaryEDCH-Info-Common-r14			OPTIONAL,
 		dl-InformationPerSecondaryRL-List	DL-InformationPerSecondaryRL-List-r13	OPTIONAL
 	}
 }
@@ -4119,6 +4206,12 @@ HeaderCompressionInfo-r4 ::=		SEQUENCE {
 
 HeaderCompressionInfoList-r4 ::=	SEQUENCE (SIZE (1..maxPDCPAlgoType)) OF
 										HeaderCompressionInfo-r4
+
+HS-SCCH-DrxCellfach-info ::=	SEQUENCE {
+	hs-scch-DrxCycleFach			ENUMERATED {sf20, sf40, sf80, sf160, sf320, sf640, spare2, spare1},
+	hs-scch-RxBurstFach				ENUMERATED {sf1, sf2},
+	t333							ENUMERATED {ms100, ms200, ms400, ms800}
+}
 
 LogicalChannelIdentity ::=			INTEGER (1..15)
 
@@ -6356,6 +6449,10 @@ UL-AddReconfTransChInfoList-r7 ::=	SEQUENCE (SIZE (1..maxTrCH)) OF
 UL-AddReconfTransChInfoList-r8 ::=	SEQUENCE (SIZE (1..maxTrCH)) OF
 										UL-AddReconfTransChInformation-r8
 
+-- The maximum allowed size of UL-AddReconfTransChInfoList-r14 sequence is 32
+UL-AddReconfTransChInfoList-r14 ::=	SEQUENCE (SIZE (1..maxTrCH)) OF
+										UL-AddReconfTransChInformation-r14
+
 UL-AddReconfTransChInformation ::= SEQUENCE {
 	ul-TransportChannelType				UL-TrCH-Type,
 	transportChannelIdentity			TransportChannelIdentity,
@@ -6404,6 +6501,26 @@ UL-AddReconfTransChInformation-r8 ::= CHOICE {
 		modeSpecific						CHOICE {
 			fdd									SEQUENCE {
 				tti									E-DCH-TTI
+			},
+			tdd									NULL
+		},
+		harq-Info							ENUMERATED { rv0, rvtable },
+		addReconf-MAC-d-FlowList			E-DCH-AddReconf-MAC-d-FlowList-r7	OPTIONAL
+	}
+}
+
+UL-AddReconfTransChInformation-r14 ::= CHOICE {
+	dch-usch							SEQUENCE {
+		ul-TransportChannelType				UL-TrCH-Type,
+		transportChannelIdentity			TransportChannelIdentity,
+		transportFormatSet					TransportFormatSet
+	},
+	e-dch								SEQUENCE {
+		ul-MAC-HeaderType					ENUMERATED { mac-iis }				OPTIONAL,
+		modeSpecific						CHOICE {
+			fdd									SEQUENCE {
+				tti									E-DCH-TTI,
+				secondaryTTI						E-DCH-TTI					OPTIONAL
 			},
 			tdd									NULL
 		},
@@ -6714,6 +6831,16 @@ AdditionalDLSecCellInfoFDD-r11 ::=	SEQUENCE {
 
 AdditionalDLSecCellInfoFDD-HandoverToUtran::=	SEQUENCE {
 	dl-SecondaryCellInfoFDD					DL-SecondaryCellInfoFDD-HandoverToUtran				OPTIONAL
+}
+
+AdditionalSecondaryCellInfoForMixedTTIConfiguration ::=		SEQUENCE {
+	eDPCCH-DPCCH-PowerOffset			E-DPCCH-DPCCH-PowerOffset			OPTIONAL,
+	happyBit-DelayCondition				HappyBit-DelayCondition				OPTIONAL,
+	e-TFC-Boost-Info					E-TFC-Boost-Info-r7					OPTIONAL,
+	e-TFCI-TableIndex					E-TFCI-TableIndex					OPTIONAL,
+	reference-E-TFCIs					E-DPDCH-Reference-E-TFCIList-r7		OPTIONAL,
+	maxChannelisationCodes				E-DPDCH-MaxChannelisationCodes		OPTIONAL,
+	schedulingInfoConfiguration			E-DPDCH-SchedulingInfoConfiguration	OPTIONAL
 }
 
 AICH-Info ::=						SEQUENCE {
@@ -18474,6 +18601,11 @@ MeasuredResults-vd20ext ::= CHOICE {
 	ue-positioning-MeasuredResults		UE-Positioning-MeasuredResults-vd20ext
 }
 
+MeasuredResults-ve30ext ::= CHOICE {
+	ueInternalMeasuredResults				UE-InternalMeasuredResults-ve30ext
+}
+
+
 MeasuredResultsList-v920ext ::=		SEQUENCE (SIZE (1..maxAdditionalMeas)) OF 
 										MeasuredResults-v920ext
 
@@ -18678,6 +18810,16 @@ MeasurementCommand-r13 ::=			CHOICE {
 	setup								MeasurementType-r13,
 	modify								SEQUENCE {
 		measurementType						MeasurementType-r13				OPTIONAL
+	},
+	release								NULL,
+	releaseAll							NULL,
+	releaseSome						MeasurementsToRelease
+}
+
+MeasurementCommand-r14 ::=			CHOICE {
+	setup								MeasurementType-r14,
+	modify								SEQUENCE {
+		measurementType						MeasurementType-r14				OPTIONAL
 	},
 	release								NULL,
 	releaseAll							NULL,
@@ -19003,6 +19145,32 @@ MeasurementType-r13 ::=				CHOICE {
 	ue-InternalMeasurement			UE-InternalMeasurement-r4,
 	csgProximityDetection				CSGProximityDetection,
 	eutraMeasurementForCELLFACH		EUTRA-MeasurementForCELLFACH-r12
+}
+
+MeasurementType-r14 ::=							CHOICE {
+	intraFrequencyMeasurement						IntraFrequencyMeasurement-r11,
+	interFrequencyMeasurement						InterFrequencyMeasurement-r12,
+	interRATMeasurement							InterRATMeasurement-r12,
+	up-Measurement									UE-Positioning-Measurement-r13,
+	trafficVolumeMeasurement						TrafficVolumeMeasurement,
+	qualityMeasurement								QualityMeasurement,
+	ue-InternalMeasurement						UE-InternalMeasurement-r14,
+	csgProximityDetection							CSGProximityDetection,
+	eutraMeasurementForCELLFACH					EUTRA-MeasurementForCELLFACH-r12,
+	applicationLayerMeasurementConfiguration	ApplicationLayerMeasurementConfiguration
+}
+
+MeasurementType-Relocation-r14 ::=				CHOICE {
+	intraFrequencyMeasurement						IntraFrequencyMeasurement-r11,
+	interFrequencyMeasurement						InterFrequencyMeasurement-r12,
+	interRATMeasurement							InterRATMeasurement-r12,
+	up-Measurement									UE-Positioning-Measurement-r13,
+	trafficVolumeMeasurement						TrafficVolumeMeasurement,
+	qualityMeasurement								QualityMeasurement,
+	ue-InternalMeasurement						UE-InternalMeasurement-r14,
+	csgProximityDetection							CSGProximityDetection,
+	eutraMeasurementForCELLFACH					EUTRA-MeasurementForCELLFACH-r12,
+	applicationLayerMeasurement					NULL
 }
 
 MeasurementValidity ::=				SEQUENCE {
@@ -19712,6 +19880,14 @@ NonUsedFreq2aParameterList-r11 ::=	SEQUENCE (SIZE (1..maxFreq)) OF
 										NonUsedFreq2aParameter-r11
 
 NonUsedFreqWList-r6 ::=		SEQUENCE (SIZE (1..maxFreq)) OF W
+
+ApplicationLayerMeasurementConfiguration ::=		SEQUENCE {
+	containerForApplicationLayerMeasurementConfiguration	OCTET STRING ( SIZE (1..1000))
+}
+
+ApplicationLayerMeasurementReporting ::=		SEQUENCE {
+	containerForApplicationLayerMeasurementReporting		OCTET STRING ( SIZE (1..8000))
+}
 
 ObservedTimeDifferenceToGSM ::=		INTEGER (0..4095)
 
@@ -20530,6 +20706,14 @@ UE-6FG-Event ::=					SEQUENCE {
 	ue-RX-TX-TimeDifferenceThreshold	UE-RX-TX-TimeDifferenceThreshold
 }
 
+UE-6HI-Event ::=					SEQUENCE {
+	timeToTrigger						TimeToTrigger,
+	hysteresis							Hysteresis,
+	ue-powerheadroomthreshold			UE-PowerHeadroomThreshold,
+	filtercoefficient					FilterCoefficient,
+	pendingtimeaftertrigger				PendingTimeAfterTrigger			OPTIONAL
+}
+
 -- dummy and dummy2 are not used in this version of the specification, they should
 -- not be sent and if received the UE behaviour is not specified.
 UE-AutonomousUpdateMode ::=			CHOICE {
@@ -20548,8 +20732,31 @@ UE-InternalEventParam ::=			CHOICE {
 	event6g								UE-6FG-Event
 }
 
+UE-InternalEventParam-r14::=		CHOICE {
+	event6a								UE-6AB-Event,
+	event6b								UE-6AB-Event,
+	event6c								TimeToTrigger,
+	event6d								TimeToTrigger,
+	event6e								TimeToTrigger,
+	event6f								UE-6FG-Event,
+	event6g								UE-6FG-Event,
+	event6h								UE-6HI-Event,
+	event6i								UE-6HI-Event,
+	spare7								NULL,
+	spare6								NULL,
+	spare5								NULL,
+	spare4								NULL,
+	spare3								NULL,
+	spare2								NULL,
+	spare1								NULL
+}
+
+
 UE-InternalEventParamList ::=		SEQUENCE (SIZE (1..maxMeasEvent)) OF
 										UE-InternalEventParam
+
+UE-InternalEventParamList-r14 ::=	SEQUENCE (SIZE (1..maxMeasEvent)) OF
+										UE-InternalEventParam-r14
 
 UE-InternalEventResults ::=			CHOICE {
 	event6a								NULL,
@@ -20559,11 +20766,27 @@ UE-InternalEventResults ::=			CHOICE {
 	event6e								NULL,
 	event6f								PrimaryCPICH-Info,
 	event6g								PrimaryCPICH-Info,
-	spare								NULL
+	ue-InternalEventResults-v30ext				UE-InternalEventResults-v30ext-IEs
+}
+
+UE-InternalEventResults-v30ext-IEs ::=	CHOICE {
+	event6h								NULL,
+	event6i								NULL,
+	spare6								NULL,
+	spare5								NULL,
+	spare4								NULL,
+	spare3								NULL,
+    spare2								NULL,
+	spare1								NULL
 }
 
 UE-InternalMeasQuantity ::=			SEQUENCE {
 	measurementQuantity					UE-MeasurementQuantity,
+	filterCoefficient					FilterCoefficient					DEFAULT fc0
+}
+
+UE-InternalMeasQuantity-r14 ::=		SEQUENCE {
+	measurementQuantity					UE-MeasurementQuantity-r14,
 	filterCoefficient					FilterCoefficient					DEFAULT fc0
 }
 
@@ -20577,6 +20800,15 @@ UE-InternalMeasuredResults ::=		SEQUENCE {
 			ue-TransmittedPowerTDD-List			UE-TransmittedPowerTDD-List	OPTIONAL,
 			appliedTA							UL-TimingAdvance			OPTIONAL
 		}
+	}
+}
+
+UE-InternalMeasuredResults-ve30ext ::=	SEQUENCE {
+	modeSpecificInfo					CHOICE {
+		fdd									SEQUENCE {
+			ue-powerheadroom					UE-PowerHeadroom			OPTIONAL
+		},
+		tdd								NULL
 	}
 }
 
@@ -20610,6 +20842,12 @@ UE-InternalMeasurement-r4 ::=		SEQUENCE {
 	reportCriteria						UE-InternalReportCriteria
 }
 
+UE-InternalMeasurement-r14 ::=		SEQUENCE {
+	ue-InternalMeasQuantity				UE-InternalMeasQuantity-r14			OPTIONAL,
+	ue-InternalReportingQuantity		UE-InternalReportingQuantity-r14	OPTIONAL,
+	reportCriteria						UE-InternalReportCriteria-r14
+}
+
 UE-InternalMeasurementSysInfo ::= 	SEQUENCE {
 	ue-InternalMeasurementID			MeasurementIdentity			DEFAULT 5,
 	ue-InternalMeasQuantity				UE-InternalMeasQuantity
@@ -20621,8 +20859,18 @@ UE-InternalReportCriteria ::=		CHOICE {
 	noReporting							NULL
 }
 
+UE-InternalReportCriteria-r14 ::=	CHOICE {
+	ue-InternalReportingCriteria		UE-InternalReportingCriteria-r14,
+	periodicalReportingCriteria			PeriodicalReportingCriteria,
+	noReporting							NULL
+}
+
 UE-InternalReportingCriteria ::=	SEQUENCE {
 	ue-InternalEventParamList			UE-InternalEventParamList			OPTIONAL
+}
+
+UE-InternalReportingCriteria-r14 ::=	SEQUENCE {
+	ue-InternalEventParamList				UE-InternalEventParamList-r14			OPTIONAL
 }
 
 UE-InternalReportingQuantity ::=	SEQUENCE {
@@ -20658,6 +20906,28 @@ UE-InternalReportingQuantity-r4 ::=	SEQUENCE {
 	}
 }
 
+UE-InternalReportingQuantity-r14 ::=	SEQUENCE {
+	ue-TransmittedPower					BOOLEAN,
+	modeSpecificInfo					CHOICE {
+		fdd									SEQUENCE {
+			ue-RX-TX-TimeDifference				BOOLEAN,
+			ue-powerheadroom					BOOLEAN
+		},
+		tdd									SEQUENCE {
+			tddOption							CHOICE {
+			-- appliedTA applies to both 3.84 Mcps TDD and to 7.68 Mcps TDD.
+			-- Therefore, no additional choice of TDD mode is necessary
+				tdd384								SEQUENCE {
+					appliedTA							BOOLEAN
+				},
+				tdd128								SEQUENCE {
+					t-ADVinfo							BOOLEAN
+				}
+			}
+		}
+	}
+}
+
 -- TABULAR: UE-MeasurementQuantity, for 3.84 Mcps TDD only the first two values
 -- ue-TransmittedPower and utra-Carrier-RSSI are used.
 -- For 1.28 Mcps TDD ue-RX-TX-TimeDifference corresponds to T-ADV in the tabular
@@ -20665,6 +20935,14 @@ UE-MeasurementQuantity ::=			ENUMERATED {
 										ue-TransmittedPower,
 										utra-Carrier-RSSI,
 										ue-RX-TX-TimeDifference }
+
+UE-MeasurementQuantity-r14 ::=		ENUMERATED {
+										ue-TransmittedPower,
+										utra-Carrier-RSSI,
+										ue-RX-TX-TimeDifference,
+										ue-powerheadroom }
+
+UE-PowerHeadroom ::=				INTEGER (0..31)
 
 UE-PowerHeadroomThreshold ::=		INTEGER (-50..33)
 
@@ -23603,7 +23881,18 @@ SysInfoType5-va80ext-IEs ::=	SEQUENCE {
 
 SysInfoType5-NonCriticalExtensions-vb50-IEs::=	SEQUENCE {
 	sysInfoType5-vb50ext				SysInfoType5-vb50ext-IEs,
+	ve30NonCriticalExtensions			SysInfoType5-NonCriticalExtensions-ve30-IEs						OPTIONAL
+
+}
+
+SysInfoType5-NonCriticalExtensions-ve30-IEs::= SEQUENCE {
+	sysInfoType5-ve30ext				SysInfoType5-ve30ext-IEs,
 	nonCriticalExtensions				SEQUENCE {}						OPTIONAL
+
+}
+
+SysInfoType5-ve30ext-IEs ::= SEQUENCE {
+	adjacentchannelinterferencelevel	ENUMERATED { moderate, high }		OPTIONAL
 }
 
 SysInfoType5-vb50ext-IEs ::=	SEQUENCE {
@@ -23660,7 +23949,7 @@ SysInfoType6 ::=					SEQUENCE {
 								sysInfoType6-va40ext				SysInfoType6-va40ext-IEs,
 								va80NonCriticalExtensions			SEQUENCE {
 									sysInfoType6-va80ext				SysInfoType6-va80ext-IEs,
-									nonCriticalExtensions				SEQUENCE {}	OPTIONAL 
+									ve30NonCriticalExtensions	SysInfoType6-NonCriticalExtensions-ve30-IEs	OPTIONAL 
 								}	OPTIONAL
 							}	OPTIONAL
 						}	OPTIONAL
@@ -23668,6 +23957,15 @@ SysInfoType6 ::=					SEQUENCE {
 				}	OPTIONAL
 			}	OPTIONAL
 		}	OPTIONAL
+}
+
+SysInfoType6-NonCriticalExtensions-ve30-IEs::= SEQUENCE {
+	sysInfoType6-ve30ext				SysInfoType6-ve30ext-IEs,
+	nonCriticalExtensions				SEQUENCE {}			OPTIONAL
+}
+
+SysInfoType6-ve30ext-IEs ::= SEQUENCE {
+	adjacentchannelinterferencelevel		ENUMERATED { moderate, high }	OPTIONAL
 }
 
 SysInfoType6-v4b0ext-IEs ::=	SEQUENCE {
@@ -24516,7 +24814,7 @@ SysInfoType21 ::=					SEQUENCE {
 SysInfoType22 ::=				SEQUENCE {
 --	In the Tabular there are separate definitions for prach-PreambleForEnhancedUplinkListType1Ext
 --	and prach-PreambleForEnhancedUplinkListType2Ext/prach-PreambleForEnhancedUplinkListType3Ext even
---		though the contents are the same. The only difference is in how the IE ìWeightî is used in 
+--		though the contents are the same. The only difference is in how the IE ‚ÄúWeight‚Äù is used in 
 --		calculating the weight for each signalled PRACH Control Parameters.
 --	To simplify the ASN.1, a single definition is used here for all three cases. 
 	prach-PreambleForEnhancedUplinkListType1Ext

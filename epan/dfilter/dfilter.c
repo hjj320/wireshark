@@ -3,19 +3,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 2001 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -145,11 +133,10 @@ dfilter_free(dfilter_t *df)
 
 	g_free(df->interesting_fields);
 
-	/* clear registers */
-	for (i = 0; i < df->max_registers; i++) {
-		if (df->registers[i]) {
-			g_list_free(df->registers[i]);
-		}
+	/* Clear registers with constant values (as set by dfvm_init_const).
+	 * Other registers were cleared on RETURN by free_register_overhead. */
+	for (i = df->num_registers; i < df->max_registers; i++) {
+		g_list_free(df->registers[i]);
 	}
 
 	if (df->deprecated) {
@@ -162,6 +149,7 @@ dfilter_free(dfilter_t *df)
 
 	g_free(df->registers);
 	g_free(df->attempted_load);
+	g_free(df->owns_memory);
 	g_free(df);
 }
 
@@ -251,6 +239,7 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 
 	state.dfw = dfw;
 	state.quoted_string = NULL;
+	state.in_set = FALSE;
 
 	df_set_extra(&state, scanner);
 
@@ -361,6 +350,7 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 		dfilter->max_registers = dfw->next_register;
 		dfilter->registers = g_new0(GList*, dfilter->max_registers);
 		dfilter->attempted_load = g_new0(gboolean, dfilter->max_registers);
+		dfilter->owns_memory = g_new0(gboolean, dfilter->max_registers);
 
 		/* Initialize constants */
 		dfvm_init_const(dfilter);

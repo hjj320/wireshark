@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -24,7 +12,7 @@
 #include <errno.h>
 
 #include "interface_toolbar.h"
-#include "interface_toolbar_lineedit.h"
+#include <ui/qt/widgets/interface_toolbar_lineedit.h>
 #include "simple_dialog.h"
 #include "ui/main_statusbar.h"
 #include <ui_interface_toolbar.h>
@@ -56,7 +44,7 @@ enum InterfaceControlCommand {
     commandStatusMessage       = 6,
     commandInformationMessage  = 7,
     commandWarningMessage      = 8,
-    commandErrorMessage        = 9,
+    commandErrorMessage        = 9
 };
 
 // To do:
@@ -76,7 +64,6 @@ InterfaceToolbar::InterfaceToolbar(QWidget *parent, const iface_toolbar *toolbar
         QString ifname((gchar *)walker->data);
         interface_[ifname].reader_thread = NULL;
         interface_[ifname].out_fd = -1;
-        interface_[ifname].log_dialog = NULL;
     }
 
     initializeControls(toolbar);
@@ -100,9 +87,12 @@ InterfaceToolbar::~InterfaceToolbar()
 {
     foreach (QString ifname, interface_.keys())
     {
-        if (interface_[ifname].log_dialog)
+        foreach (int num, control_widget_.keys())
         {
-            interface_[ifname].log_dialog->close();
+            if (interface_[ifname].log_dialog.contains(num))
+            {
+                interface_[ifname].log_dialog[num]->close();
+            }
         }
     }
 
@@ -480,19 +470,19 @@ void InterfaceToolbar::setInterfaceValue(QString ifname, QWidget *widget, int nu
     {
         if (command == commandControlSet)
         {
-            if (interface_[ifname].log_dialog)
+            if (interface_[ifname].log_dialog.contains(num))
             {
-                interface_[ifname].log_dialog->clearText();
+                interface_[ifname].log_dialog[num]->clearText();
             }
             interface_[ifname].log_text.clear();
         }
         if (command == commandControlSet || command == commandControlAdd)
         {
-            if (interface_[ifname].log_dialog)
+            if (interface_[ifname].log_dialog.contains(num))
             {
-                interface_[ifname].log_dialog->appendText(payload);
+                interface_[ifname].log_dialog[num]->appendText(payload);
             }
-            interface_[ifname].log_text.append(payload);
+            interface_[ifname].log_text[num].append(payload);
         }
     }
     else if (widget->property(interface_role_property).toInt() == INTERFACE_ROLE_CONTROL)
@@ -663,20 +653,21 @@ void InterfaceToolbar::onLineEditChanged()
 void InterfaceToolbar::onLogButtonPressed()
 {
     const QString &ifname = ui->interfacesComboBox->currentText();
+    QPushButton *button = static_cast<QPushButton *>(sender());
+    int num = control_widget_.key(button);
 
-    if (!interface_[ifname].log_dialog)
+    if (!interface_[ifname].log_dialog.contains(num))
     {
-        QPushButton *button = static_cast<QPushButton *>(sender());
-        interface_[ifname].log_dialog = new FunnelTextDialog(ifname + " " + button->text());
-        connect(interface_[ifname].log_dialog, SIGNAL(accepted()), this, SLOT(closeLog()));
-        connect(interface_[ifname].log_dialog, SIGNAL(rejected()), this, SLOT(closeLog()));
+        interface_[ifname].log_dialog[num] = new FunnelTextDialog(ifname + " " + button->text());
+        connect(interface_[ifname].log_dialog[num], SIGNAL(accepted()), this, SLOT(closeLog()));
+        connect(interface_[ifname].log_dialog[num], SIGNAL(rejected()), this, SLOT(closeLog()));
 
-        interface_[ifname].log_dialog->setText(interface_[ifname].log_text);
+        interface_[ifname].log_dialog[num]->setText(interface_[ifname].log_text[num]);
     }
 
-    interface_[ifname].log_dialog->show();
-    interface_[ifname].log_dialog->raise();
-    interface_[ifname].log_dialog->activateWindow();
+    interface_[ifname].log_dialog[num]->show();
+    interface_[ifname].log_dialog[num]->raise();
+    interface_[ifname].log_dialog[num]->activateWindow();
 }
 
 void InterfaceToolbar::onHelpButtonPressed()
@@ -695,14 +686,18 @@ void InterfaceToolbar::closeLog()
 
     foreach (QString ifname, interface_.keys())
     {
-        if (interface_[ifname].log_dialog == log_dialog)
+        foreach (int num, control_widget_.keys())
         {
-            interface_[ifname].log_dialog = NULL;
+            if (interface_[ifname].log_dialog.value(num) == log_dialog)
+            {
+                interface_[ifname].log_dialog.remove(num);
+            }
         }
     }
 }
 
-void InterfaceToolbar::startReaderThread(QString ifname, QString control_in)
+
+void InterfaceToolbar::startReaderThread(QString ifname, void *control_in)
 {
     QThread *thread = new QThread;
     InterfaceToolbarReader *reader = new InterfaceToolbarReader(ifname, control_in);
@@ -725,15 +720,14 @@ void InterfaceToolbar::startCapture(GArray *ifaces)
     if (!ifaces || ifaces->len == 0)
         return;
 
-#ifdef HAVE_EXTCAP
     const QString &selected_ifname = ui->interfacesComboBox->currentText();
     QString first_capturing_ifname;
     bool selected_found = false;
 
     for (guint i = 0; i < ifaces->len; i++)
     {
-        interface_options interface_opts = g_array_index(ifaces, interface_options, i);
-        QString ifname(interface_opts.name);
+        interface_options *interface_opts = &g_array_index(ifaces, interface_options, i);
+        QString ifname(interface_opts->name);
 
         if (!interface_.contains(ifname))
             // This interface is not for us
@@ -749,21 +743,26 @@ void InterfaceToolbar::startCapture(GArray *ifaces)
             // Already have control channels for this interface
             continue;
 
-        // The reader thread will open control in channel
-        startReaderThread(ifname, interface_opts.extcap_control_in);
-
         // Open control out channel
-        interface_[ifname].out_fd = ws_open(interface_opts.extcap_control_out, O_WRONLY | O_BINARY, 0);
-
+#ifdef _WIN32
+        startReaderThread(ifname, interface_opts->extcap_control_in_h);
+        interface_[ifname].out_fd = _open_osfhandle((intptr_t)interface_opts->extcap_control_out_h, O_APPEND | O_BINARY);
+#else
+        startReaderThread(ifname, interface_opts->extcap_control_in);
+        interface_[ifname].out_fd = ws_open(interface_opts->extcap_control_out, O_WRONLY | O_BINARY, 0);
+#endif
         sendChangedValues(ifname);
         controlSend(ifname, 0, commandControlInitialized);
     }
 
     if (!selected_found && !first_capturing_ifname.isEmpty())
+    {
         ui->interfacesComboBox->setCurrentText(first_capturing_ifname);
+    }
     else
+    {
         updateWidgets();
-#endif // HAVE_EXTCAP
+    }
 }
 
 void InterfaceToolbar::stopCapture()
@@ -772,15 +771,18 @@ void InterfaceToolbar::stopCapture()
     {
         if (interface_[ifname].reader_thread)
         {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 2, 0)
-            interface_[ifname].reader_thread->requestInterruption();
-#endif
+            if (!interface_[ifname].reader_thread->isFinished())
+            {
+                interface_[ifname].reader_thread->requestInterruption();
+            }
             interface_[ifname].reader_thread = NULL;
         }
 
         if (interface_[ifname].out_fd != -1)
         {
+#ifndef _WIN32
             ws_close (interface_[ifname].out_fd);
+#endif
             interface_[ifname].out_fd = -1;
         }
 
@@ -852,11 +854,11 @@ void InterfaceToolbar::onRestoreButtonPressed()
                 break;
 
             case INTERFACE_ROLE_LOGGER:
-                if (interface_[ifname].log_dialog)
+                if (interface_[ifname].log_dialog.contains(num))
                 {
-                    interface_[ifname].log_dialog->clearText();
+                    interface_[ifname].log_dialog[num]->clearText();
                 }
-                interface_[ifname].log_text.clear();
+                interface_[ifname].log_text[num].clear();
                 break;
 
             default:
@@ -917,6 +919,7 @@ void InterfaceToolbar::updateWidgets()
 
 void InterfaceToolbar::interfaceListChanged()
 {
+#ifdef HAVE_LIBPCAP
     const QString &selected_ifname = ui->interfacesComboBox->currentText();
     bool keep_selected = false;
 
@@ -925,17 +928,17 @@ void InterfaceToolbar::interfaceListChanged()
 
     for (guint i = 0; i < global_capture_opts.all_ifaces->len; i++)
     {
-        interface_t device = g_array_index(global_capture_opts.all_ifaces, interface_t, i);
-        if (device.hidden)
+        interface_t *device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
+        if (device->hidden)
             continue;
 
-        if (interface_.keys().contains(device.name))
+        if (interface_.keys().contains(device->name))
         {
-            ui->interfacesComboBox->addItem(device.name);
-            if (selected_ifname.compare(device.name) == 0)
+            ui->interfacesComboBox->addItem(device->name);
+            if (selected_ifname.compare(device->name) == 0)
             {
                 // Keep selected interface
-                ui->interfacesComboBox->setCurrentText(device.name);
+                ui->interfacesComboBox->setCurrentText(device->name);
                 keep_selected = true;
             }
         }
@@ -950,6 +953,7 @@ void InterfaceToolbar::interfaceListChanged()
     }
 
     updateWidgets();
+#endif
 }
 
 void InterfaceToolbar::on_interfacesComboBox_currentIndexChanged(const QString &ifname)

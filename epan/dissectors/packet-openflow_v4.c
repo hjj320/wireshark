@@ -7,19 +7,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Ref https://www.opennetworking.org/sdn-resources/onf-specifications/openflow
  */
@@ -913,7 +901,6 @@ static int
 dissect_openflow_oxm_header_v4(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, guint16 length _U_)
 {
     guint16 oxm_class;
-    guint8  oxm_length;
 
     /* oxm_class */
     oxm_class = tvb_get_ntohs(tvb, offset);
@@ -932,17 +919,8 @@ dissect_openflow_oxm_header_v4(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
     offset+=1;
 
     /* oxm_length */
-    oxm_length = tvb_get_guint8(tvb, offset);
     proto_tree_add_item(tree, hf_openflow_v4_oxm_length, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset+=1;
-
-    if (oxm_class == OFPXMC_EXPERIMENTER) {
-        /* uint32_t experimenter; */
-        proto_tree_add_item(tree, hf_openflow_v4_oxm_experimenter_experimenter, tvb, offset, 4, ENC_BIG_ENDIAN);
-        offset+=4;
-        proto_tree_add_item(tree, hf_openflow_v4_oxm_experimenter_value, tvb, offset, oxm_length - 4, ENC_NA);
-        offset+=(oxm_length - 4);
-    }
 
     return offset;
 }
@@ -1080,10 +1058,13 @@ dissect_openflow_oxm_v4(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
             offset = oxm_end;
         }
 
+    } else if (oxm_class == OFPXMC_EXPERIMENTER) {
+        /* uint32_t experimenter; */
+        proto_tree_add_item(oxm_tree, hf_openflow_v4_oxm_experimenter_experimenter, tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset+=4;
+        proto_tree_add_item(oxm_tree, hf_openflow_v4_oxm_experimenter_value, tvb, offset, oxm_length - 4, ENC_NA);
+        offset+=(oxm_length - 4);
     } else {
-        if (oxm_class == OFPXMC_EXPERIMENTER) {
-            oxm_length -= 4; /* oxm_length includes experimenter field */
-        }
         proto_tree_add_expert_format(oxm_tree, pinfo, &ei_openflow_v4_oxm_undecoded,
                                      tvb, offset, oxm_length, "Unknown OXM body.");
         offset+=oxm_length;

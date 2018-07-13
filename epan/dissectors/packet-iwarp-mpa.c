@@ -8,20 +8,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
- * USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 /* INCLUDES */
@@ -384,9 +371,7 @@ is_mpa_rep(tvbuff_t *tvb, packet_info *pinfo)
 		return FALSE;
 	}
 
-	conversation = find_conversation(pinfo->num, &pinfo->src,
-			&pinfo->dst, pinfo->ptype, pinfo->srcport,
-			pinfo->destport, 0);
+	conversation = find_conversation_pinfo(pinfo, 0);
 
 	if (!conversation) {
 		return FALSE;
@@ -420,9 +405,7 @@ is_mpa_fpdu(packet_info *pinfo)
 	conversation_t *conversation = NULL;
 	mpa_state_t *state = NULL;
 
-	conversation = find_conversation(pinfo->num, &pinfo->src,
-			&pinfo->dst, pinfo->ptype, pinfo->srcport,
-			pinfo->destport, 0);
+	conversation = find_conversation_pinfo(pinfo, 0);
 
 	if (!conversation) {
 		return FALSE;
@@ -691,8 +674,6 @@ dissect_mpa_fpdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	/* get ULPDU length of this FPDU */
 	ulpdu_length = (guint16) tvb_get_ntohs(tvb, offset);
 
-	mpa_packetlist(pinfo, MPA_FPDU);
-
 	if (state->minfo[endpoint].valid) {
 		num_of_m = number_of_markers(state, tcpinfo, endpoint);
 	}
@@ -711,11 +692,10 @@ dissect_mpa_fpdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		pad_length = fpdu_pad_length(ulpdu_length);
 		exp_ulpdu_length = expected_ulpdu_length(state, tcpinfo, endpoint);
 		if (!exp_ulpdu_length || exp_ulpdu_length != (ulpdu_length + pad_length)) {
-			proto_tree_add_expert_format(tree, pinfo, &ei_mpa_bad_length, tvb, offset,
-				MPA_ULPDU_LENGTH_LEN,
-				"[ULPDU length [%u] field does not contain the expected length[%u]]",
-				exp_ulpdu_length, ulpdu_length + pad_length);
+			return 0;
 		}
+
+		mpa_packetlist(pinfo, MPA_FPDU);
 
 		mpa_item = proto_tree_add_item(tree, proto_iwarp_mpa, tvb, 0,
 				-1, ENC_NA);
@@ -786,8 +766,7 @@ dissect_iwarp_mpa(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 	/* FPDU */
 	if (tvb_captured_length(tvb) >= MPA_SMALLEST_FPDU_LEN && is_mpa_fpdu(pinfo)) {
 
-		conversation = find_conversation(pinfo->num, &pinfo->src,
-				&pinfo->dst, pinfo->ptype, pinfo->srcport, pinfo->destport, 0);
+		conversation = find_conversation_pinfo(pinfo, 0);
 
 		state = get_mpa_state(conversation);
 

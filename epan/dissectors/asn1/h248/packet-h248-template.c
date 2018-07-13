@@ -9,18 +9,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -1434,14 +1423,15 @@ static guint8 wild_card = 0xFF; /* place to store wildcardField */
 static void
 export_h248_pdu(packet_info *pinfo, tvbuff_t *tvb)
 {
-    exp_pdu_data_t *exp_pdu_data = export_pdu_create_common_tags(pinfo, "h248", EXP_PDU_TAG_PROTO_NAME);
+    if (have_tap_listener(exported_pdu_tap)) {
+        exp_pdu_data_t *exp_pdu_data = export_pdu_create_common_tags(pinfo, "h248", EXP_PDU_TAG_PROTO_NAME);
 
-    exp_pdu_data->tvb_captured_length = tvb_captured_length(tvb);
-    exp_pdu_data->tvb_reported_length = tvb_reported_length(tvb);
-    exp_pdu_data->pdu_tvb = tvb;
+        exp_pdu_data->tvb_captured_length = tvb_captured_length(tvb);
+        exp_pdu_data->tvb_reported_length = tvb_reported_length(tvb);
+        exp_pdu_data->pdu_tvb = tvb;
 
-    tap_queue_packet(exported_pdu_tap, pinfo, exp_pdu_data);
-
+        tap_queue_packet(exported_pdu_tap, pinfo, exp_pdu_data);
+    }
 }
 
 extern void h248_param_ber_integer(proto_tree* tree, tvbuff_t* tvb, packet_info* pinfo, int hfid, h248_curr_info_t* u _U_, void* implicit) {

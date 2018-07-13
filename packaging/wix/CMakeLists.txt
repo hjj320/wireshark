@@ -4,19 +4,7 @@
 # By Gerald Combs <gerald@wireshark.org>
 # Copyright 1998 Gerald Combs
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+# SPDX-License-Identifier: GPL-2.0-or-later
 #
 
 # We should use CPack to help generate a .msi using WIX.
@@ -24,7 +12,6 @@
 set(WIX_GENERATED_FILES
 	${CMAKE_CURRENT_BINARY_DIR}/DependentComponents.wxs
 	${CMAKE_CURRENT_BINARY_DIR}/Diameter.wxs
-	${CMAKE_CURRENT_BINARY_DIR}/GtkDependentComponents.wxs
 	${CMAKE_CURRENT_BINARY_DIR}/QtDependentComponents.wxs
 	${CMAKE_CURRENT_BINARY_DIR}/QtTranslation.wxs
 	${CMAKE_CURRENT_BINARY_DIR}/RadiusDict.wxs
@@ -56,7 +43,6 @@ set(WIX_FILES
 set(WIX_OUT_FILES
 	${CMAKE_CURRENT_BINARY_DIR}/DependentComponents.wixobj
 	${CMAKE_CURRENT_BINARY_DIR}/Diameter.wixobj
-	${CMAKE_CURRENT_BINARY_DIR}/GtkDependentComponents.wixobj
 	${CMAKE_CURRENT_BINARY_DIR}/QtDependentComponents.wixobj
 	${CMAKE_CURRENT_BINARY_DIR}/QtTranslation.wixobj
 	${CMAKE_CURRENT_BINARY_DIR}/RadiusDict.wixobj
@@ -90,7 +76,7 @@ set(WIRESHARK_LIB_DIR "${_wireshark_lib_dir}")
 set(WINPCAP_PACKAGE_VERSION ${WINPCAP_VERSION})
 string(REPLACE "_" "." PCAP_DISPLAY_VERSION "${WINPCAP_PACKAGE_VERSION}")
 
-set(USBPCAP_DISPLAY_VERSION "1.2.0.1")
+set(USBPCAP_DISPLAY_VERSION "1.2.0.3")
 
 set(PRODUCT_VERSION ${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT_PATCH_VERSION}.${PROJECT_BUILD_VERSION})
 
@@ -101,16 +87,31 @@ set(PRODUCT_VERSION ${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT_
 set (VERSION "${PROJECT_VERSION}")
 set (PRODUCT_VERSION=${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_MICRO}.${VERSION_BUILD})
 
-# Use the merge module that comes with Visual Studio (From MSVC 2013?)
-# This is currently hardcoded for MSVC 2013
-set (MSVC_CRT_VERSION "VC120")
-set (MSVC_REDIST_DIR "$ENV{PROGRAMFILES}/Common Files/Merge Modules")
-message(STATUS "Using ${MSVC_REDIST_DIR}/Microsoft_${MSVC_CRT_VERSION}_CRT_${TARGET_MACHINE}.msm for the installer")
-
-if(NOT ENABLE_STATIC)
-	# XXX Replace ENABLE_LIBWIRESHARK with !ENABLE_STATIC everywhere.
-	set(ENABLE_LIBWIRESHARK "-dENABLE_LIBWIRESHARK")
+# Use the merge module that comes with our version of Visual Studio
+if(MSVC_VERSION GREATER_EQUAL 1910)
+	set (MSVC_CRT_VERSION "VC141")
+elseif(MSVC_VERSION GREATER_EQUAL 1900)
+	set (MSVC_CRT_VERSION "VC140")
 endif()
+
+set(MERGE_MODULE "Microsoft_${MSVC_CRT_VERSION}_CRT_${TARGET_MACHINE}.msm")
+set (PF86_ENV "ProgramFiles(x86)")
+
+set(VC_TOOLS_MERGE_MODULES_DIR)
+if (DEFINED ENV{VCToolsRedistDir})
+	set(VC_TOOLS_MERGE_MODULES_DIR "$ENV{VCToolsRedistDir}/MergeModules")
+endif()
+
+find_path(MERGE_MODULE_DIR ${MERGE_MODULE}
+	PATHS
+		#"$ENV{VCINSTALLDIR}/VC/Redist/MSVC/how-do-we-get-this-version/Merge Modules"
+		${VC_TOOLS_MERGE_MODULES_DIR}
+		"$ENV{${PF86_ENV}}/Common Files/Merge Modules"
+		"$ENV{PROGRAMFILES}/Common Files/Merge Modules"
+	NO_DEFAULT_PATH
+)
+
+message(STATUS "Using ${MERGE_MODULE_DIR}/Microsoft_${MSVC_CRT_VERSION}_CRT_${TARGET_MACHINE}.msm for the WiX installer")
 
 # DependentComponents.wxi. Can be created at configure time.
 set(_all_manifest_wix "${CMAKE_CURRENT_BINARY_DIR}/DependentComponents.wxs")
@@ -121,10 +122,13 @@ file(APPEND "${_all_manifest_wix}"  "<?include InputPaths.wxi ?>\n")
 file(APPEND "${_all_manifest_wix}" "  <Fragment>\n")
 file(APPEND "${_all_manifest_wix}" "    <DirectoryRef Id=\"INSTALLFOLDER\">\n")
 SET(unique_component "")
-foreach(_dll ${GLIB2_DLLS} ${CARES_DLL} ${GCRYPT_DLLS} ${GEOIP_DLL}
+foreach(_dll ${GLIB2_DLLS} ${CARES_DLL} ${GCRYPT_DLLS} ${JSONGLIB_DLL}
 		${GNUTLS_DLLS} ${KERBEROS_DLLS} ${LIBSSH_DLL} ${LUA_DLL}
 		${LZ4_DLL} ${NGHTTP2_DLL} ${SBC_DLL} ${SMI_DLL} ${SNAPPY_DLL}
-		${SPANDSP_DLL} ${LIBXML2_DLL} ${WINSPARKLE_DLL} ${ZLIB_DLL}
+		${SPANDSP_DLL} ${BCG729_DLL} ${LIBXML2_DLL} ${WINSPARKLE_DLL}
+		${ZLIB_DLL}
+		# Required for mmdbresolve
+		${MAXMINDDB_DLL}
 	)
 	#ensure uniqueness of files
 	IF(NOT "${unique_component}" MATCHES "(^|;)${_dll}(;|$)")
@@ -146,10 +150,13 @@ file(APPEND "${_all_manifest_wix}" "  </Fragment>\n")
 file(APPEND "${_all_manifest_wix}" "  <Fragment>\n")
 file(APPEND "${_all_manifest_wix}" "    <ComponentGroup Id=\"CG.RequiredDependencies\">\n")
 SET(unique_file "")
-foreach(_dll ${GLIB2_DLLS} ${CARES_DLL} ${GCRYPT_DLLS} ${GEOIP_DLL}
+foreach(_dll ${GLIB2_DLLS} ${CARES_DLL} ${GCRYPT_DLLS} ${JSONGLIB_DLL}
 		${GNUTLS_DLLS} ${KERBEROS_DLLS} ${LIBSSH_DLL} ${LUA_DLL}
 		${LZ4_DLL} ${NGHTTP2_DLL} ${SBC_DLL} ${SMI_DLL} ${SNAPPY_DLL}
-		${SPANDSP_DLL} ${LIBXML2_DLL} ${WINSPARKLE_DLL} ${ZLIB_DLL}
+		${SPANDSP_DLL} ${BCG729_DLL} ${LIBXML2_DLL} ${WINSPARKLE_DLL}
+		${ZLIB_DLL}
+		# mmdbresolve
+		${MAXMINDDB_DLL}
 	)
 	#ensure uniqueness of files
 	IF(NOT "${unique_file}" MATCHES "(^|;)${_dll}(;|$)")
@@ -166,125 +173,13 @@ file(APPEND "${_all_manifest_wix}" "    </ComponentGroup>\n")
 file(APPEND "${_all_manifest_wix}" "  </Fragment>\n")
 file(APPEND "${_all_manifest_wix}" "\n</Wix>\n")
 
-# GtkDependentComponents.wxs. Can be created at configure time.
-set(_gtk_dll_manifest_wix "${CMAKE_CURRENT_BINARY_DIR}/GtkDependentComponents.wxs")
-file(WRITE "${_gtk_dll_manifest_wix}" "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
-file(APPEND "${_gtk_dll_manifest_wix}" "<Wix xmlns=\"http://schemas.microsoft.com/wix/2006/wi\">\n\n")
-if(BUILD_wireshark_gtk AND GTK_FOUND)
-	file(APPEND "${_gtk_dll_manifest_wix}"  "  <!-- Files required for the GTK+ section. Generated by CMake. -->\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "<?include InputPaths.wxi ?>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "  <Fragment>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "    <DirectoryRef Id=\"INSTALLFOLDER\">\n")
-	foreach(_dll ${GTK2_DLLS} ${GTK3_DLLS})
-		IF(NOT "${unique_component}" MATCHES "(^|;)${_dll}(;|$)")
-			STRING(REGEX REPLACE "[-|\\.]" "_" _wix_name ${_dll})
-			file(APPEND "${_gtk_dll_manifest_wix}"  "       <Component Id=\"cmp${_wix_name}\" Guid=\"*\">\n")
-			file(APPEND "${_gtk_dll_manifest_wix}"  "         <File Id=\"fil${_wix_name}\" KeyPath=\"yes\" Source=\"$(var.Staging.Dir)\\${_dll}\"/>\n")
-			file(APPEND "${_gtk_dll_manifest_wix}"  "       </Component>\n")
-			SET(unique_component ${unique_component} ${_dll})
-		ENDIF(NOT "${unique_component}" MATCHES "(^|;)${_dll}(;|$)")
-	endforeach()
-	file(APPEND "${_gtk_dll_manifest_wix}"  "    </DirectoryRef>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "  </Fragment>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "  <Fragment>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "    <ComponentGroup Id=\"CG.GTKRequiredDependencies\">\n")
-	foreach(_dll ${GTK2_DLLS} ${GTK3_DLLS})
-		IF(NOT "${unique_file}" MATCHES "(^|;)${_dll}(;|$)")
-			STRING(REGEX REPLACE "[-|\\.]" "_" _wix_name ${_dll})
-			file(APPEND "${_gtk_dll_manifest_wix}"  "       <ComponentRef Id=\"cmp${_wix_name}\" />\n")
-			SET(unique_file ${unique_file} ${_dll})
-		ENDIF(NOT "${unique_file}" MATCHES "(^|;)${_dll}(;|$)")
-	endforeach()
-	file(APPEND "${_gtk_dll_manifest_wix}"  "    </ComponentGroup>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "  </Fragment>\n")
-
-	#XXX - May be able to do this with heat.exe, but attaching it to existing GTK dependencies for now
-	if(GTK2_ETC_DIR)
-		file(APPEND "${_gtk_dll_manifest_wix}"  "  <Fragment>\n")
-		file(APPEND "${_gtk_dll_manifest_wix}"  "    <DirectoryRef Id=\"dirEtcGtk2_0\">\n")
-		file(GLOB gtk2_etc "${EXECUTABLE_OUTPUT_PATH}/${CMAKE_BUILD_TYPE}/etc/gtk-2.0/*")
-		foreach(_file ${gtk2_etc})
-			get_filename_component(_gtk_dll ${_file} NAME_WE)
-			get_filename_component(_gtk_dll_ext ${_file} EXT)
-			set(_gtk_dll ${_gtk_dll}${_gtk_dll_ext})
-			STRING(REGEX REPLACE "[-|\\.]" "_" _wix_name ${_gtk_dll})
-			file(APPEND "${_gtk_dll_manifest_wix}"  "       <Component Id=\"cmp${_wix_name}\" Guid=\"*\">\n")
-			file(APPEND "${_gtk_dll_manifest_wix}"  "         <File Id=\"fil${_wix_name}\" KeyPath=\"yes\" Source=\"$(var.GTK2_0.Dir)\\${_gtk_dll}\" />\n")
-			file(APPEND "${_gtk_dll_manifest_wix}"  "       </Component>\n")
-		endforeach()
-		file(APPEND "${_gtk_dll_manifest_wix}"  "    </DirectoryRef>\n")
-		file(APPEND "${_gtk_dll_manifest_wix}"  "  </Fragment>\n")
-	endif()
-	if(GTK2_ENGINES_DLL_DIR)
-		file(APPEND "${_gtk_dll_manifest_wix}"  "  <Fragment>\n")
-		file(APPEND "${_gtk_dll_manifest_wix}"  "    <DirectoryRef Id=\"dirLibGtk2_0_2_10_0_engines\">\n")
-		file(GLOB gtk2_engines "${EXECUTABLE_OUTPUT_PATH}/${CMAKE_BUILD_TYPE}/lib/gtk-2.0/2.10.0/engines/*")
-		foreach(_file ${gtk2_engines})
-			get_filename_component(_gtk_dll ${_file} NAME_WE)
-			get_filename_component(_gtk_dll_ext ${_file} EXT)
-			set(_gtk_dll ${_gtk_dll}${_gtk_dll_ext})
-			STRING(REGEX REPLACE "[-|\\.]" "_" _wix_name ${_gtk_dll})
-			file(APPEND "${_gtk_dll_manifest_wix}"  "       <Component Id=\"cmp${_wix_name}\" Guid=\"*\">\n")
-			file(APPEND "${_gtk_dll_manifest_wix}"  "         <File Id=\"fil${_wix_name}\" KeyPath=\"yes\" Source=\"$(var.Lib_GTK2_0_Engines.Dir)\\${_gtk_dll}\" />\n")
-			file(APPEND "${_gtk_dll_manifest_wix}"  "       </Component>\n")
-		endforeach()
-		file(APPEND "${_gtk_dll_manifest_wix}"  "    </DirectoryRef>\n")
-		file(APPEND "${_gtk_dll_manifest_wix}"  "  </Fragment>\n")
-	endif()
-	file(APPEND "${_gtk_dll_manifest_wix}"  "  <Fragment>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "    <DirectoryRef Id=\"dirLibGtk2_0_modules\">\n")
-	file(GLOB gtk2_modules "${EXECUTABLE_OUTPUT_PATH}/${CMAKE_BUILD_TYPE}/lib/gtk-2.0/modules/*")
-	foreach(_file ${gtk2_modules})
-		get_filename_component(_gtk_dll ${_file} NAME_WE)
-		get_filename_component(_gtk_dll_ext ${_file} EXT)
-		set(_gtk_dll ${_gtk_dll}${_gtk_dll_ext})
-		STRING(REGEX REPLACE "[-|\\.]" "_" _wix_name ${_gtk_dll})
-		file(APPEND "${_gtk_dll_manifest_wix}"  "       <Component Id=\"cmp${_wix_name}\" Guid=\"*\">\n")
-		file(APPEND "${_gtk_dll_manifest_wix}"  "         <File Id=\"fil${_wix_name}\" KeyPath=\"yes\" Source=\"$(var.Lib_GTK2_0_Modules.Dir)\\${_gtk_dll}\" />\n")
-		file(APPEND "${_gtk_dll_manifest_wix}"  "       </Component>\n")
-	endforeach()
-	file(APPEND "${_gtk_dll_manifest_wix}"  "    </DirectoryRef>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "  </Fragment>\n")
-	#put the files into a group
-	file(APPEND "${_gtk_dll_manifest_wix}"  "  <Fragment>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "    <ComponentGroup Id=\"CG.GTKSubdirectory\">\n")
-	if(GTK2_ETC_DIR)
-		foreach(_file ${gtk2_etc})
-			get_filename_component(_gtk_dll ${_file} NAME_WE)
-			get_filename_component(_gtk_dll_ext ${_file} EXT)
-			set(_gtk_dll ${_gtk_dll}${_gtk_dll_ext})
-			STRING(REGEX REPLACE "[-|\\.]" "_" _wix_name ${_gtk_dll})
-			file(APPEND "${_gtk_dll_manifest_wix}"  "       <ComponentRef Id=\"cmp${_wix_name}\" />\n")
-		endforeach()
-	endif()
-	if(GTK2_ENGINES_DLL_DIR)
-		foreach(_file ${gtk2_engines})
-			get_filename_component(_gtk_dll ${_file} NAME_WE)
-			get_filename_component(_gtk_dll_ext ${_file} EXT)
-			set(_gtk_dll ${_gtk_dll}${_gtk_dll_ext})
-			STRING(REGEX REPLACE "[-|\\.]" "_" _wix_name ${_gtk_dll})
-			file(APPEND "${_gtk_dll_manifest_wix}"  "       <ComponentRef Id=\"cmp${_wix_name}\" />\n")
-		endforeach()
-	endif()
-	foreach(_file ${gtk2_modules})
-		get_filename_component(_gtk_dll ${_file} NAME_WE)
-		get_filename_component(_gtk_dll_ext ${_file} EXT)
-		set(_gtk_dll ${_gtk_dll}${_gtk_dll_ext})
-		STRING(REGEX REPLACE "[-|\\.]" "_" _wix_name ${_gtk_dll})
-		file(APPEND "${_gtk_dll_manifest_wix}"  "       <ComponentRef Id=\"cmp${_wix_name}\" />\n")
-	endforeach()
-	file(APPEND "${_gtk_dll_manifest_wix}"  "    </ComponentGroup>\n")
-	file(APPEND "${_gtk_dll_manifest_wix}"  "  </Fragment>\n")
-
-endif()
-file(APPEND "${_gtk_dll_manifest_wix}"  "\n</Wix>\n")
-
-if(BUILD_wireshark_gtk AND GTK_FOUND)
-	set(use_gtk "-dGTK_DIR")
-endif()
 
 if(SMI_DIR)
-	set(use_smi "-dSMI_DIR")
+	set(d_smi_dir "-dSMI_DIR")
+endif()
+
+if (MAXMINDDB_FOUND)
+	set(d_mmdbresolve_exe "-dMMDBRESOLVE_EXE")
 endif()
 
 set(WIX_CANDLE_DEFINES
@@ -292,6 +187,8 @@ set(WIX_CANDLE_DEFINES
 	-dPlatform=${TARGET_MACHINE}
 	-dWiresharkName=${CMAKE_PROJECT_NAME}
 	-dWiresharkVersion=${PRODUCT_VERSION}
+	-dWiresharkMajorVersion=${PROJECT_MAJOR_VERSION}
+	-dWiresharkMinorVersion=${PROJECT_MINOR_VERSION}
 	-dAssetDir=${CMAKE_SOURCE_DIR}/packaging/wix
 	-dBuildOutputDir=${EXECUTABLE_OUTPUT_PATH}/${CMAKE_BUILD_TYPE}
 	-dDiameterDir=${ARCHIVE_OUTPUT_PATH}/${CMAKE_BUILD_TYPE}/diameter
@@ -300,10 +197,9 @@ set(WIX_CANDLE_DEFINES
 	-dRadiusDictDir=${ARCHIVE_OUTPUT_PATH}/${CMAKE_BUILD_TYPE}/radius
 	-dSnmpMibDir=${ARCHIVE_OUTPUT_PATH}/${CMAKE_BUILD_TYPE}/snmp/mibs
 	-dVCRedistVersion=${MSVC_CRT_VERSION}
-	-dVCRedistDir=${MSVC_REDIST_DIR}
-	${use_gtk}
-	${use_smi}
-	${ENABLE_LIBWIRESHARK}
+	-dVCRedistDir=${MERGE_MODULE_DIR}
+	${d_smi_dir}
+	${d_mmdbresolve_exe}
 	-arch ${TARGET_MACHINE}
 	-ext WixUIExtension
 	-I${CMAKE_SOURCE_DIR}/packaging/wix
@@ -394,7 +290,6 @@ endmacro( ADD_WIX_PACKAGE_TARGET )
 
 set(CLEAN_FILES
 	DependentComponents.wxs
-	GtkDependentComponents.wxs
 	QtDependentComponents.wxs
 	SNMPMibs.wxs
 	RadiusDict.wxs

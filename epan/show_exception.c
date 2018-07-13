@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 2000 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -124,6 +112,14 @@ show_exception(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		/* Don't record FragmentBoundsError exceptions as expert events - they merely
 		 * reflect dissection done with reassembly turned off
 		 * (any case where it's caused by something else is a bug). */
+		break;
+
+	case ContainedBoundsError:
+		col_append_fstr(pinfo->cinfo, COL_INFO, "[Malformed Packet: length of contained item exceeds length of containing item]");
+		item = proto_tree_add_protocol_format(tree, proto_malformed,
+		    tvb, 0, 0, "[Malformed Packet: %s: length of contained item exceeds length of containing item]",
+		    pinfo->current_proto);
+		expert_add_info(pinfo, item, &ei_malformed);
 		break;
 
 	case ReportedBoundsError:

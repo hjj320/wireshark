@@ -11,25 +11,14 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
 
 
 #include <epan/packet.h>
+#include <wsutil/str_util.h>
 
 void proto_register_lwm2mtlv(void);
 void proto_reg_handoff_lwm2mtlv(void);
@@ -102,6 +91,7 @@ typedef struct
 	guint identifier;
 	guint length;
 	guint totalLength;
+	gboolean is_valid_utf8_string;
 } lwm2mElement_t;
 
 
@@ -150,7 +140,12 @@ addElementTree(tvbuff_t *tvb, proto_tree *tlv_tree, lwm2mElement_t *element)
 		                                     "Object Instance %02u (%u Bytes)", element->identifier, element->length_of_value);
 
 	case RESOURCE_INSTANCE:
-		str = tvb_get_string_enc(wmem_packet_scope(), tvb, valueOffset, element->length_of_value, ENC_ASCII);
+		str = tvb_get_string_enc(wmem_packet_scope(), tvb, valueOffset, element->length_of_value, ENC_UTF_8);
+		if (isprint_utf8_string(str, element->length_of_value)) {
+			element->is_valid_utf8_string = TRUE;
+		} else {
+			str = tvb_bytes_to_str(wmem_packet_scope(), tvb, valueOffset, element->length_of_value);
+		}
 		return proto_tree_add_subtree_format(tlv_tree, tvb, 0, element->totalLength, ett_lwm2mtlv_resourceInstance, NULL,
 		                                     "%02u: %s", element->identifier, str);
 
@@ -159,7 +154,12 @@ addElementTree(tvbuff_t *tvb, proto_tree *tlv_tree, lwm2mElement_t *element)
 		                                     "%02u: (Array of %u Bytes)", element->identifier, element->length_of_value);
 
 	case RESOURCE:
-		str = tvb_get_string_enc(wmem_packet_scope(), tvb, valueOffset, element->length_of_value, ENC_ASCII);
+		str = tvb_get_string_enc(wmem_packet_scope(), tvb, valueOffset, element->length_of_value, ENC_UTF_8);
+		if (isprint_utf8_string(str, element->length_of_value)) {
+			element->is_valid_utf8_string = TRUE;
+		} else {
+			str = tvb_bytes_to_str(wmem_packet_scope(), tvb, valueOffset, element->length_of_value);
+		}
 		return proto_tree_add_subtree_format(tlv_tree, tvb, 0, element->totalLength, ett_lwm2mtlv_resource, NULL,
 		                                     "%02u: %s", element->identifier, str);
 	}
@@ -174,13 +174,17 @@ addValueInterpretations(tvbuff_t *tvb, proto_tree *tlv_tree, lwm2mElement_t *ele
 
 	valueOffset = 1 + element->length_of_identifier + element->length_of_length;
 
-	proto_tree_add_item(tlv_tree, hf_lwm2mtlv_value_string, tvb, valueOffset, element->length_of_value, ENC_ASCII|ENC_NA);
+	if (element->is_valid_utf8_string) {
+		proto_tree_add_item(tlv_tree, hf_lwm2mtlv_value_string, tvb, valueOffset, element->length_of_value, ENC_UTF_8|ENC_NA);
+	}
 
 	switch(element->length_of_value)
 	{
 	case 0x01:
 		proto_tree_add_item(tlv_tree, hf_lwm2mtlv_value_integer, tvb, valueOffset, element->length_of_value, ENC_BIG_ENDIAN);
-		proto_tree_add_item(tlv_tree, hf_lwm2mtlv_value_boolean, tvb, valueOffset, element->length_of_value, ENC_BIG_ENDIAN);
+		if (tvb_get_guint8(tvb, valueOffset) < 2) {
+			proto_tree_add_item(tlv_tree, hf_lwm2mtlv_value_boolean, tvb, valueOffset, element->length_of_value, ENC_BIG_ENDIAN);
+		}
 		break;
 	case 0x02:
 		proto_tree_add_item(tlv_tree, hf_lwm2mtlv_value_integer, tvb, valueOffset, element->length_of_value, ENC_BIG_ENDIAN);
@@ -231,19 +235,19 @@ decodeVariableInt(tvbuff_t *tvb, const gint offset, const guint length)
 	case 1:
 		return tvb_get_guint8(tvb, offset);
 	case 2:
-		return tvb_get_letohs(tvb, offset);
+		return tvb_get_ntohs(tvb, offset);
 	case 3:
-		return tvb_get_letoh24(tvb, offset);
+		return tvb_get_ntoh24(tvb, offset);
 	case 4:
-		return tvb_get_letohl(tvb, offset);
+		return tvb_get_ntohl(tvb, offset);
 	case 5:
-		return tvb_get_letoh40(tvb, offset);
+		return tvb_get_ntoh40(tvb, offset);
 	case 6:
-		return tvb_get_letoh48(tvb, offset);
+		return tvb_get_ntoh48(tvb, offset);
 	case 7:
-		return tvb_get_letoh56(tvb, offset);
+		return tvb_get_ntoh56(tvb, offset);
 	case 8:
-		return tvb_get_letoh64(tvb, offset);
+		return tvb_get_ntoh64(tvb, offset);
 	default:
 		return 0;
 	}
@@ -264,6 +268,8 @@ static guint parseTLVHeader(tvbuff_t *tvb, lwm2mElement_t *element)
 	}
 
 	element->totalLength = 1 + element->length_of_identifier + element->length_of_length + element->length_of_value;
+	element->is_valid_utf8_string = FALSE;
+
 	return element->totalLength;
 }
 

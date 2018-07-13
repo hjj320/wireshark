@@ -9,24 +9,15 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
 
 #include <epan/packet.h>
+
+#include "packet-cipmotion.h"
+
 #include "packet-cip.h"
 
 void proto_register_cipmotion(void);
@@ -35,6 +26,7 @@ void proto_reg_handoff_cipmotion(void);
 
 /* Protocol handle for CIP Motion */
 static int proto_cipmotion = -1;
+static int proto_cipmotion3 = -1;
 
 /* Header field identifiers, these are registered in the
  * proto_register_cipmotion function along with the bites/bytes
@@ -67,7 +59,7 @@ static int hf_cip_data_rx_time_stamp        = -1;
 static int hf_cip_data_tx_time_stamp        = -1;
 static int hf_cip_node_fltalarms            = -1;
 static int hf_cip_motor_cntrl               = -1;
-static int hf_cip_fdbk_config               = -1;
+static int hf_cip_feedback_mode             = -1;
 static int hf_cip_axis_control              = -1;
 static int hf_cip_control_status            = -1;
 static int hf_cip_axis_response             = -1;
@@ -262,6 +254,7 @@ static gint ett_axis_status_set     = -1;
 static gint ett_command_control     = -1;
 
 static dissector_handle_t cipmotion_handle;
+static dissector_handle_t cipmotion3_handle;
 
 /* These are the BITMASKS for the Time Data Set header field */
 #define TIME_DATA_SET_TIME_STAMP                0x1
@@ -327,8 +320,8 @@ static const value_string cip_motor_control_vals[] = {
    { 0,    NULL                    }
 };
 
-/* Translate function to string - feedback config values */
-static const value_string cip_fdbk_config_vals[] = {
+/* Translate function to string - feedback mode values */
+static const value_string cip_feedback_mode_vals[] = {
    { 0,    "No Feedback"       },
    { 1,    "Master Feedback"   },
    { 2,    "Motor Feedback"    },
@@ -404,7 +397,7 @@ static const value_string cip_axis_response_vals[] = {
 /* Translate function to string - axis state values */
 static const value_string cip_axis_state_vals[] = {
    { 0,    "Initializing"      },
-   { 1,    "Pre-charging"      },
+   { 1,    "Pre-Charge"        },
    { 2,    "Stopped"           },
    { 3,    "Starting"          },
    { 4,    "Running"           },
@@ -459,6 +452,43 @@ static const value_string cip_sc_vals[] = {
    { SC_RUN_HOOKUP_TEST,           "Run Hookup Test"           },
    { SC_GET_HOOKUP_TEST_DATA,      "Get Hookup Test Data"      },
    { 0,                            NULL                        }
+};
+
+static int dissect_node_control(packet_info *pinfo _U_, proto_tree *tree, proto_item *item _U_, tvbuff_t *tvb,
+   int offset, int total_len _U_)
+{
+   static const int* bits[] = {
+      &hf_cip_node_control_remote,
+      &hf_cip_node_control_sync,
+      &hf_cip_node_data_valid,
+      &hf_cip_node_fault_reset,
+      NULL
+   };
+
+   proto_tree_add_bitmask(tree, tvb, offset, hf_cip_node_control, ett_node_control, bits, ENC_LITTLE_ENDIAN);
+
+   return 1;
+}
+
+static int dissect_node_status(packet_info *pinfo _U_, proto_tree *tree, proto_item *item _U_, tvbuff_t *tvb,
+   int offset, int total_len _U_)
+{
+   static const int* bits[] = {
+      &hf_cip_node_control_remote,
+      &hf_cip_node_control_sync,
+      &hf_cip_node_data_valid,
+      &hf_cip_node_device_faulted,
+      NULL
+   };
+
+   proto_tree_add_bitmask(tree, tvb, offset, hf_cip_node_status, ett_node_status, bits, ENC_LITTLE_ENDIAN);
+
+   return 1;
+}
+
+attribute_info_t cip_motion_attribute_vals[] = {
+   { 0x42, CIP_ATTR_CLASS, 14, -1, "Node Control", cip_dissector_func, NULL, dissect_node_control },
+   { 0x42, CIP_ATTR_CLASS, 15, -1, "Node Status", cip_dissector_func, NULL, dissect_node_status },
 };
 
 /*
@@ -749,8 +779,8 @@ dissect_cntr_cyclic(guint32 con_format _U_, tvbuff_t* tvb, proto_tree* tree, gui
    /* Add the control mode header field to the tree */
    proto_tree_add_item(header_tree, hf_cip_motor_cntrl, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 
-   /* Add the feedback config header field to the tree */
-   proto_tree_add_item(header_tree, hf_cip_fdbk_config, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN);
+   /* Add the feedback mode header field to the tree */
+   proto_tree_add_item(header_tree, hf_cip_feedback_mode, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN);
 
    /* Add the axis control field to the tree */
    proto_tree_add_item(header_tree, hf_cip_axis_control, tvb, offset + 2, 1, ENC_LITTLE_ENDIAN);
@@ -817,7 +847,7 @@ dissect_cntr_cyclic(guint32 con_format _U_, tvbuff_t* tvb, proto_tree* tree, gui
 }
 
 /*
- * Function name: dissect_devce_cyclic
+ * Function name: dissect_device_cyclic
  *
  * Purpose: Dissect the cyclic data block of a device to controller format message
  *
@@ -825,7 +855,7 @@ dissect_cntr_cyclic(guint32 con_format _U_, tvbuff_t* tvb, proto_tree* tree, gui
  * as their starting offset
  */
 static guint32
-dissect_devce_cyclic(guint32 con_format _U_, tvbuff_t* tvb, proto_tree* tree, guint32 offset, guint32 size, guint32 instance _U_)
+dissect_device_cyclic(guint32 con_format _U_, tvbuff_t* tvb, proto_tree* tree, guint32 offset, guint32 size, guint32 instance _U_)
 {
    proto_item *temp_proto_item;
    proto_tree *header_tree, *temp_proto_tree;
@@ -838,8 +868,8 @@ dissect_devce_cyclic(guint32 con_format _U_, tvbuff_t* tvb, proto_tree* tree, gu
    /* Add the control mode header field to the tree */
    proto_tree_add_item(header_tree, hf_cip_motor_cntrl, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 
-   /* Add the feedback config header field to the tree */
-   proto_tree_add_item(header_tree, hf_cip_fdbk_config, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN);
+   /* Add the feedback mode header field to the tree */
+   proto_tree_add_item(header_tree, hf_cip_feedback_mode, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN);
 
    /* Add the axis response field to the tree */
    proto_tree_add_item(header_tree, hf_cip_axis_response, tvb, offset + 2, 1, ENC_LITTLE_ENDIAN);
@@ -1597,15 +1627,7 @@ dissect_var_cont_conn_header(tvbuff_t* tvb, proto_tree* tree, guint32* inst_coun
    proto_tree_add_item(header_tree, hf_cip_revision, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN);
    proto_tree_add_item(header_tree, hf_cip_updateid, tvb, offset + 2, 1, ENC_LITTLE_ENDIAN);
 
-   /* Create the tree for the node control header field */
-   temp_proto_item = proto_tree_add_item(header_tree, hf_cip_node_control, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
-   temp_proto_tree = proto_item_add_subtree(temp_proto_item, ett_node_control);
-
-   /* Add the individual data elements to the node control tree */
-   proto_tree_add_item(temp_proto_tree, hf_cip_node_control_remote, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
-   proto_tree_add_item(temp_proto_tree, hf_cip_node_control_sync, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
-   proto_tree_add_item(temp_proto_tree, hf_cip_node_data_valid, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
-   proto_tree_add_item(temp_proto_tree, hf_cip_node_fault_reset, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
+   dissect_node_control(NULL, header_tree, NULL, tvb, offset + 3, 1);
 
    /* Read the instance count field from the packet into memory, this gets passed back out of the method */
    *inst_count = tvb_get_guint8(tvb, offset + 4);
@@ -1691,15 +1713,7 @@ dissect_var_devce_conn_header(tvbuff_t* tvb, proto_tree* tree, guint32* inst_cou
    proto_tree_add_item(header_tree, hf_cip_revision, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN);
    proto_tree_add_item(header_tree, hf_cip_updateid, tvb, offset + 2, 1, ENC_LITTLE_ENDIAN);
 
-   /* Create the tree for the node status header field */
-   temp_proto_item = proto_tree_add_item(header_tree, hf_cip_node_status, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
-   temp_proto_tree = proto_item_add_subtree(temp_proto_item, ett_node_status);
-
-   /* Add the individual data elements to the node control tree */
-   proto_tree_add_item(temp_proto_tree, hf_cip_node_control_remote, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
-   proto_tree_add_item(temp_proto_tree, hf_cip_node_control_sync, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
-   proto_tree_add_item(temp_proto_tree, hf_cip_node_data_valid, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
-   proto_tree_add_item(temp_proto_tree, hf_cip_node_device_faulted, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
+   dissect_node_status(NULL, header_tree, NULL, tvb, offset + 3, 1);
 
    /* Read the instance count field from the packet into memory, this gets passed back out of the method */
    *inst_count = tvb_get_guint8(tvb, offset + 4);
@@ -1777,13 +1791,14 @@ dissect_var_devce_conn_header(tvbuff_t* tvb, proto_tree* tree, guint32* inst_cou
  * Returns: void
  */
 static int
-dissect_cipmotion(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_)
+dissect_cipmotion(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data)
 {
    guint32     con_format;
    guint32     update_id;
    proto_item *proto_item_top;
    proto_tree *proto_tree_top;
    guint32     offset = 0;
+   guint32 ConnPoint = GPOINTER_TO_UINT(data);
 
    /* Create display subtree for the protocol by creating an item and then
     * creating a subtree from the item, the subtree must have been registered
@@ -1794,6 +1809,12 @@ dissect_cipmotion(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* dat
    /* Add the CIP class 1 sequence number to the tree */
    proto_tree_add_item(proto_tree_top, hf_cip_class1_seqnum, tvb, offset, 2, ENC_LITTLE_ENDIAN);
    offset = (offset + 2);
+
+   if (ConnPoint >= 3)
+   {
+       dissect_cip_run_idle(tvb, offset, proto_tree_top);
+       offset += 4;
+   }
 
    /* Pull the actual values for the connection format and update id from the
     * incoming message to be used in the column info */
@@ -1856,7 +1877,7 @@ dissect_cipmotion(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* dat
             break;
          case FORMAT_VAR_DEVICE_TO_CONTROL:
             if ( cyc_size > 0 )
-               offset = dissect_devce_cyclic( con_format, tvb, proto_tree_top, offset, cyc_size, instance );
+               offset = dissect_device_cyclic( con_format, tvb, proto_tree_top, offset, cyc_size, instance );
             if ( cyc_blk_size > 0 )
                offset = dissect_cyclic_rd( tvb, proto_tree_top, offset, cyc_blk_size );
             if ( evnt_size > 0 )
@@ -1877,6 +1898,12 @@ dissect_cipmotion(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* dat
    }
 
    return tvb_captured_length(tvb);
+}
+
+static int dissect_cipmotion3(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_)
+{
+    guint32 ConnPoint = 3;
+    return dissect_cipmotion(tvb, pinfo, tree, GUINT_TO_POINTER(ConnPoint));
 }
 
 /*
@@ -1957,9 +1984,9 @@ proto_register_cipmotion(void)
           "Node Control: Data Valid", HFILL}
       },
       { &hf_cip_node_fault_reset,
-        { "Fault Reset", "cipm.fltrst",
+        { "Node Fault Reset", "cipm.fltrst",
           FT_BOOLEAN, 8, TFS(&tfs_true_false), 0x08,
-          "Node Control: Device Fault Reset", HFILL}
+          "Node Control: Node Fault Reset", HFILL}
       },
       { &hf_cip_node_device_faulted,
         { "Faulted", "cipm.flt",
@@ -1987,9 +2014,9 @@ proto_register_cipmotion(void)
           "Time Data Set: Time Offset", HFILL}
       },
       { &hf_cip_time_data_diag,
-        { "Time Update Diagnostics", "cipm.time.update",
+        { "Update Diagnostics", "cipm.time.update",
           FT_BOOLEAN, 8, TFS(&tfs_true_false), TIME_DATA_SET_UPDATE_DIAGNOSTICS,
-          "Time Data Set: Time Update Diagnostics", HFILL}
+          "Time Data Set: Update Diagnostics", HFILL}
       },
       { &hf_cip_time_data_time_diag,
         { "Time Diagnostics", "cipm.time.diag",
@@ -2043,10 +2070,10 @@ proto_register_cipmotion(void)
           FT_UINT8, BASE_DEC, VALS(cip_motor_control_vals), 0,
           "Cyclic Data Block: Motor Control Mode", HFILL }
       },
-      { &hf_cip_fdbk_config,
-        { "Feedback Config", "cipm.fdbkcfg",
-          FT_UINT8, BASE_DEC, VALS(cip_fdbk_config_vals), 0,
-          "Cyclic Data Block: Feedback Configuration", HFILL }
+      { &hf_cip_feedback_mode,
+        { "Feedback Mode", "cipm.feedback_mode",
+          FT_UINT8, BASE_DEC, VALS(cip_feedback_mode_vals), 0,
+          "Cyclic Data Block: Feedback Mode", HFILL }
       },
       { &hf_cip_axis_control,
         { "Axis Control", "cipm.axisctrl",
@@ -2282,14 +2309,14 @@ proto_register_cipmotion(void)
       },
 
       { &hf_cip_intrp,
-        { "Interpolation Control", "cipm.intrp",
+        { "Command Target Update", "cipm.intrp",
           FT_UINT8, BASE_DEC, VALS(cip_interpolation_vals), COMMAND_CONTROL_TARGET_UPDATE,
-          "Cyclic Data Block: Interpolation Control", HFILL}
+          "Cyclic Data Block: Command Target Update", HFILL}
       },
       { &hf_cip_position_data_type,
-        { "Position Data Type", "cipm.posdatatype",
+        { "Command Position Data Type", "cipm.posdatatype",
           FT_UINT8, BASE_DEC, VALS(cip_pos_data_type_vals), COMMAND_CONTROL_POSITION_DATA_TYPE,
-          "Cyclic Data Block: Position Data Type", HFILL }
+          "Cyclic Data Block: Command Position Data Type", HFILL }
       },
       { &hf_cip_axis_state,
         { "Axis State", "cipm.axste",
@@ -2332,7 +2359,7 @@ proto_register_cipmotion(void)
           "Cyclic Data Block: Read Status", HFILL }
       },
       { &hf_cip_event_checking,
-        { "Event Control", "cipm.evntchkcontrol",
+        { "Event Checking Control", "cipm.evntchkcontrol",
           FT_UINT32, BASE_HEX, NULL, 0,
           "Event Channel: Event Checking Control", HFILL}
       },
@@ -2342,7 +2369,7 @@ proto_register_cipmotion(void)
           "Event Channel: Event Acknowledgement", HFILL}
       },
       { &hf_cip_event_status,
-        { "Event Status", "cipm.evntchkstatus",
+        { "Event Checking Status", "cipm.evntchkstatus",
           FT_UINT32, BASE_HEX, NULL, 0,
           "Event Channel: Event Checking Status", HFILL}
       },
@@ -2734,9 +2761,9 @@ proto_register_cipmotion(void)
           "Axis Status Data Set: Vel Lock", HFILL }
       },
       { &hf_cip_axis_sts_vel_standstill,
-        { "Standstill", "cipm.axis.nomo",
+        { "Vel Standstill", "cipm.axis.nomo",
           FT_BOOLEAN, 32, TFS(&tfs_true_false), 0x00000100,
-          "Axis Status Data Set: Standstill", HFILL }
+          "Axis Status Data Set: Vel Standstill", HFILL }
       },
       { &hf_cip_axis_sts_vel_threshold,
         { "Vel Threshold", "cipm.axis.vthresh",
@@ -2754,9 +2781,9 @@ proto_register_cipmotion(void)
           "Axis Status Data Set: Acc Limit", HFILL }
       },
       { &hf_cip_axis_sts_dec_limit,
-        { "Dec Limit", "cipm.axis.dlim",
+        { "Decel Limit", "cipm.axis.dlim",
           FT_BOOLEAN, 32, TFS(&tfs_true_false), 0x00001000,
-          "Axis Status Data Set: Dec Limit", HFILL }
+          "Axis Status Data Set: Decel Limit", HFILL }
       },
       { &hf_cip_axis_sts_torque_threshold,
         { "Torque Threshold", "cipm.axis.tthresh",
@@ -2916,7 +2943,14 @@ proto_register_cipmotion(void)
      "Common Industrial Protocol, Motion",  /* Full name of protocol        */
      "CIP Motion",           /* Short name of protocol       */
      "cipm");                /* Abbreviated name of protocol */
-;
+
+   proto_cipmotion3 = proto_register_protocol_in_name_only(
+     "Common Industrial Protocol, Motion - Rev 3",
+     "CIP Motion - Rev 3",
+     "cipm3",
+     proto_cipmotion,
+     FT_PROTOCOL);
+
    /* Register the header fields with the protocol */
    proto_register_field_array(proto_cipmotion, hf, array_length(hf));
 
@@ -2924,11 +2958,13 @@ proto_register_cipmotion(void)
    proto_register_subtree_array(cip_subtree, array_length(cip_subtree));
 
    cipmotion_handle = register_dissector("cipmotion", dissect_cipmotion, proto_cipmotion);
+   cipmotion3_handle = register_dissector("cipmotion3", dissect_cipmotion3, proto_cipmotion3);
 }
 
 void proto_reg_handoff_cipmotion(void)
 {
    dissector_add_for_decode_as("enip.io", cipmotion_handle);
+   dissector_add_for_decode_as("enip.io", cipmotion3_handle);
 }
 
 /*

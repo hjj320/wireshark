@@ -7,19 +7,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 /*
  * Updates and corrections for Polish networks MCC=260
@@ -50,7 +38,7 @@ void proto_register_e212(void);
 
 /*
  * Annex to ITU Operational Bulletin
- * No. 1121 - 1.IV.2017
+ * No. 1133 - 1.X.2017
  *
  * COMPLEMENT TO ITU-T RECOMMENDATION E.212 (05/2008)
  *
@@ -77,7 +65,7 @@ static const value_string E212_codes[] = {
     {  218, "Bosnia and Herzegovina" },
     {  219, "Croatia" },
     {  220, "Serbia" },
-    {  221, "Unassigned" },
+    {  221, "Kosovo" },
     {  222, "Italy" },
     {  223, "Unassigned" },
     {  224, "Unassigned" },
@@ -903,6 +891,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 21601, "Telenor Hungary Ltd" },
     { 21602, "MVM NET Ltd." },
     { 21603, "DIGI Telecommunication Ltd." },
+    { 21604, "Invitech Solutions" },
     { 21630, "Magyar Telecom Plc" },
     { 21670, "Vodafone" },
     { 21671, "UPC Hungary Ltd" },
@@ -919,6 +908,9 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 22007, "Orion telekom d.o.o." },
     { 22009, "MUNDIO MOBILE d.o.o." },
     { 22011, "GLOBALTEL d.o.o." },
+    { 22101 ,"Telecom of Kosovo J.S.C." },
+    { 22102, "IPKO Telecommunications LLC" },
+    { 22106, "Dardafon.Net LLC" },
     { 22201, "Telecom Italia Mobile (TIM)" },
     { 22202, "Elsacom" },
     { 22210, "Omnitel Pronto Italia (OPI)" },
@@ -941,6 +933,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 22806, "SBB AG" },
     { 22808, "TelCommunication Services AG" },
     { 22809, "Comfone AG" },
+    { 22811, "Swisscom Broadcast AG" },
     { 22812, "Sunrise Communications AG" },
     { 22851, "Bebbicell AG" },
     { 22853, "upc Cablecom GmbH" },
@@ -955,7 +948,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 23002, "Telefonica O2 Czech Republic a.s." },
     { 23003, "Vodafone Czech Republic a.s." },
     { 23004, "Air Telecom a.s." },
-    { 23005, "Travel Telekommunikation, s.r.o." },
+    { 23005, "PODA a.s." },
     { 23007, "ASTELNET s.r.o" },
     { 23008, "Compatel s.r.o" },
     { 23009, "Mundio Distribution Czech Republic s.r.o." },
@@ -1073,12 +1066,13 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 23843, "MobiWeb Limited" },
     { 23866, "TT-Netvaerket P/S" },
     { 23877, "Tele2" },
-    { 24001, "Telia Sonera Sverige AB" },
-    { 24002, "H3G Access AB" },
+    { 24001, "Telia Sverige AB" },
+    { 24002, "Hi3G Access AB" },
     { 24003, "Netett Sverige AB" },
     { 24004, "3G Infrastructure Services AB" },
     { 24005, "Svenska UMTS-Nat AB" },
     { 24006, "Telenor Sverige AB" },
+    { 24007, "Tele2 Sverige AB" },
     { 24008, "Telenor Sverige AB" },
     { 24009, "Com4 Sweden AB" },
     { 24010, "Tele2 Sverige AB" },
@@ -1091,7 +1085,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 24017, "Gotalandsnatet AB" },
     { 24018, "Generic Mobile Systems Sweden AB" },
     { 24019, "Mundio Mobile Sweden Ltd" },
-    { 24020, "iMEZ AB" },
+    { 24020, "Wireless Maingate Messaging Services AB" },
     { 24021, "Trafikverket ICT" },
     { 24022, "EuTel AB" },
     { 24023, "Infobip LTD (UK)" },
@@ -1222,14 +1216,14 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 25092, "Printelefone" },
     { 25093, "Telecom XXI" },
     { 25099, "Beeline" },
-    { 25501, "Ukrainian Mobile Communication, UMC" },
-    { 25502, "Ukranian Radio Systems, URS" },
-    { 25503, "Kyivstar GSM" },
+    { 25501, "Ukrainian Mobile Communication, UMC / PRIVATE JOINT STOCK COMPANY \"VF UKRAINE\" (PRJSC \"VF UKRAINE\")" },
+    { 25502, "Ukranian Radio Systems, URS / PRIVATE JOINT STOCK COMPANY KYIVSTAR (JSC KYIVSTAR)" },
+    { 25503, "PRIVATE JOINT STOCK COMPANY KYIVSTAR (JSC KYIVSTAR)" },
     { 25504, "International Telecommunications Ltd." },
     { 25505, "Golden Telecom" },
-    { 25506, "Astelit" },
-    { 25507, "Ukrtelecom" },
-    { 25521, "CJSC - Telesystems of Ukraine" },
+    { 25506, "LIMITED LIABILITY COMPANY \"INTERNATIONAL TELECOMMUNICATIONS\" (LLC INTERTELECOM)" },
+    { 25507, "Ukrtelecom / LIMITED LIABILITY COMPANY \"TRYMOB\" (LLC \"TRYMOB\")" },
+    { 25521, "PRIVATE JOINT STOCK COMPANY \"TELESYSTEMS OF UKRAINE\" (PJSC \"TELESYSTEMS OF UKRAINE\")" },
     { 25701, "MDC Velcom" },
     { 25702, "MTS" },
     { 25703, "BelCel Joint Venture (JV)" },
@@ -1309,12 +1303,19 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 26277, "E-Plus Mobilfunk GmbH & Co. KG" },
     { 26278, "Telekom Deutschland GmbH" },
     { 26279, "ng4T GmbH" },
-    { 26601, "Gibtelecom GSM" },
+    { 26601, "Gibtel" },
     { 26609, "Eazi Telecom Ltd (trading as \"Limba\")" },
-    { 26801, "Vodafone Telecel - Comunicacoes Pessoais, S.A." },
-    { 26803, "Optimus - Telecomunicacoes, S.A." },
+    { 26801, "Vodafone Portugal - Comunicacoes Pessoais, S.A." },
+    { 26802, "MEO - Servicos de Comunicacoes e Multimedia, S.A." },
+    { 26803, "NOS Comunicacoes, S.A." },
+    { 26804, "Lycamobile Portugal, Lda." },
     { 26805, "Oniway - Inforcomunicacoes, S.A." },
-    { 26806, "TMN - Telecomunicacoes Moveis Nacionais, S.A." },
+    { 26806, "MEO - Servicos de Comunicacoes e Multimedia, S.A" },
+    { 26807, "Mundio Mobile (Portugal) Limited" },
+    { 26811, "Compatel, Limited"},
+    { 26812, "IP Telecom - Servicos de Telecomunicacoes, S.A." },
+    { 26813, "G9Telecom, S.A." },
+    { 26880, "MEO - Servicos de Comunicacoes e Multimedia, S.A." },
     { 27001, "P&T Luxembourg" },
     { 27002, "MTX Connect S.a r.l." },
     { 27010, "BLUE COMMUNICATIONS" },
@@ -1402,7 +1403,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 36301, "SETAR N.V." },
     { 36302, "DIGICEL ARUBA" },
     { 36439, "Bahamas Telecommunications Company Limited" },
-    { 36449, "NewCo2015 Limited" },
+    { 36449, "Be Aliv Limited" },
     { 36801, "ETECSA" },
     { 37001, "Orange Dominicana, S.A." },
     { 37002, "Verizon Dominicana S.A." },
@@ -1555,7 +1556,14 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 41288, "Afghan Telecom" },
     { 41302, "MTN Network Ltd." },
     { 41303, "Celtel Lanka Ltd." },
+    { 41400, "Myanmar Posts and Telecommunications" },
     { 41401, "Myanmar Post and Telecommunication" },
+    { 41402, "Myanmar Posts and Telecommunications" },
+    { 41403, "Myanmar Economic Corporation" },
+    { 41404, "Myanmar Posts and Telecommunications" },
+    { 41405, "Ooredoo Myanmar Limited" },
+    { 41406, "Telenor Myanmar Limited" },
+    { 41409, "Myanmar National Tele & Communication Co.,Ltd" },
     { 41505, "Ogero Telecom" },
     { 41532, "Cellis" },
     { 41533, "Cellis" },
@@ -1613,6 +1621,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 42506, "Wataniya" },
     { 42507, "Mirs Ltd" },
     { 42508, "Golan Telecom Ltd" },
+    { 42509, "Marathon 018 Xphone Ltd." },
     { 42511, "365 Telecom (MVNO)" },
     { 42512, "Free Telecom (MVNO)" },
     { 42513, "Ituran Cellular Communications" },
@@ -1912,7 +1921,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 50538, "Truphone Pty Ltd" },
     { 50539, "Telstra Corporation Ltd." },
     { 50540, "CITIC PACIFIC MINING" },
-    { 50541, "OTOC Australia Pty Ltd" },
+    { 50541, "Aqura Technologies Pty" },
     { 50542, "Groote Eylandt Mining Company Pty Ltd" },
     { 50561, "Commtel Network Solutions Pty Ltd" },
     { 50562, "NBNCo Limited" },
@@ -1953,6 +1962,8 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 52503, "M1" },
     { 52505, "StarHub" },
     { 52508, "StarHub" },
+    { 52509, "Liberty Wireless Pte Ltd" },
+    { 52510, "TPG Telecom Pte Ltd" },
     { 52512, "Digital Trunked Radio Network" },
     { 52811, "DST Com" },
     { 53000, "Reserved for AMPS MIN based IMSI's" },
@@ -1998,8 +2009,13 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 60203, "Etisalat" },
     { 60301, "Algerie Telecom" },
     { 60302, "Orascom Telecom Algerie" },
-    { 60400, "Meditelecom (GSM)" },
-    { 60401, "Ittissalat Al Maghrid" },
+    { 60400, "Medi Telecom" },
+    { 60401, "Itissalat Al-Maghrib" },
+    { 60402, "Wana Corporate" },
+    { 60404, "Al Houria Telecom" },
+    { 60405, "Wana Corporate" },
+    { 60406, "Itissalat Al-Maghrib" },
+    { 60499, "Al Houria Telecom" },
     { 60502, "Tunisie Telecom" },
     { 60503, "Orascom Telecom" },
     { 60701, "Gamcel" },
@@ -2121,6 +2137,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 64111, "Uganda Telecom Limited" },
     { 64114, "House of Integrated Technology and Systems Uganda Ltd (HiTs Telecom)" },
     { 64118, "Suretelecom Uganda Limited" },
+    { 64120, "Hamilton Telecom Limited" },
     { 64122, "Airtel Uganda Limited" },
     { 64126, "Lycamobile Network services Uganda Limited" },
     { 64130, "Anupam Global Soft Uganda Limited" },
@@ -2162,6 +2179,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 65202, "Orange Botswana (Pty) Ltd" },
     { 65204, "Botswana Telecommunications Corporation (BTC)" },
     { 65301, "SPTC" },
+    { 65302, "Swazi Mobile Limited" },
     { 65310, "Swazi MTN" },
     { 65401, "HURI / Comores Telecom" },
     { 65402, "TELMA / TELCO SA" },
@@ -2194,6 +2212,7 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 65546, "SMS Cellular Services (Pty) Ltd" },
     { 65550, "Ericsson South Africa (Pty) Ltd" },
     { 65551, "Integrat (Pty) Ltd" },
+    { 65553, "Lycamobile (Pty) Ltd" },
     { 65573, "Wireless Business Solutions (Pty) Ltd" },
     { 65574, "Wireless Business Solutions (Pty) Ltd" },
     { 65801, "Sure South Atlantic Ltd. (Ascension)" },
@@ -2268,6 +2287,8 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 73017, "COMPATEL Chile Limitada" },
     { 73018, "Empresas Bunker S.A." },
     { 73019, "Sociedad Falabella Movil SPA" },
+    { 73020, "Inversiones Santa Fe Limitada" },
+    { 73021, "WILL S.A." },
     { 73402, "Corporacion Digitel" },
     { 73403, "GALAXY ENTERTAINMENT DE VENEZUELA C.A." },
     { 73404, "Telcel, C.A." },
@@ -2339,6 +2360,9 @@ static const value_string mcc_mnc_2digits_codes[] = {
     { 90153, "Deutsche Telekom AG" },
     { 90154, "Teleena Holding B.V." },
     { 90155, "Beezz Communication Sol. Ltd." },
+    { 90156, "European Telecommunications Standards Institute (ETSI)" },
+    { 90157, "SAP" },
+    { 90158, "BICS SA" },
     { 90188, "UN Office for the Coordination of Humanitarian Affairs (OCHA)" },
     { 0, NULL }
 };
@@ -2346,6 +2370,8 @@ static const value_string mcc_mnc_2digits_codes[] = {
 value_string_ext mcc_mnc_2digits_codes_ext = VALUE_STRING_EXT_INIT(mcc_mnc_2digits_codes);
 
 static const value_string mcc_mnc_3digits_codes[] = {
+    {  302130, "Xplornet Communications" },
+    {  302131, "Xplornet Communications" },
     {  302220, "Telus Mobility" },
     {  302221, "Telus Mobility" },
     {  302222, "Telus Mobility" },
@@ -2866,7 +2892,7 @@ static int ett_e212_imsi = -1;
 
 static expert_field ei_E212_mcc_non_decimal = EI_INIT;
 static expert_field ei_E212_mnc_non_decimal = EI_INIT;
-
+static expert_field ei_E212_imsi_malformed = EI_INIT;
 
 /* static int hf_E212_msin = -1; */
 
@@ -3239,9 +3265,11 @@ dissect_e212_mcc_mnc_in_utf8_address(tvbuff_t *tvb, packet_info *pinfo _U_, prot
 
     /* Try to match the MCC and 2 digits MNC with an entry in our list of operators */
     if (!try_val_to_str_ext(mcc * 100 + mnc, &mcc_mnc_2digits_codes_ext)) {
-        ws_strtou16(tvb_get_string_enc(wmem_packet_scope(), tvb, offset + 3, 3, ENC_UTF_8),
-            NULL, &mnc);
-        long_mnc = TRUE;
+        if (tvb_reported_length_remaining(tvb, offset + 3) > 2) {
+            ws_strtou16(tvb_get_string_enc(wmem_packet_scope(), tvb, offset + 3, 3, ENC_UTF_8),
+                NULL, &mnc);
+            long_mnc = TRUE;
+        }
     }
 
     proto_tree_add_uint(tree, hf_E212_mcc, tvb, offset, 3, mcc );
@@ -3263,6 +3291,24 @@ dissect_e212_mcc_mnc_in_utf8_address(tvbuff_t *tvb, packet_info *pinfo _U_, prot
         return 5;
 }
 
+static gboolean
+is_imsi_string_valid(const gchar *imsi_str)
+{
+    size_t len;
+
+    if (imsi_str == NULL)
+        return FALSE;
+    len = strlen(imsi_str);
+    /* According to TS 23.003 2.2 and 2.3, the number of digits in IMSI shall not exceed 15.
+     * Even if in the reality imsis are always 14 or 15 digits long, the standard doesn't say
+     * anything about minimum length, except for the fact that they shall have a valid MCC
+     * (3 digits long), a valid MNC (2 or 3 digits long) and a MSIN (at least 1 digit)*/
+    if (len < 6 || len > 15 || strchr(imsi_str, '?')) {
+        return FALSE;
+    }
+    return TRUE;
+}
+
 const gchar *
 dissect_e212_imsi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int length, gboolean skip_first)
 {
@@ -3276,6 +3322,9 @@ dissect_e212_imsi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offse
      */
     imsi_str = tvb_bcd_dig_to_wmem_packet_str( tvb, offset, length, NULL, skip_first);
     item = proto_tree_add_string(tree, hf_E212_imsi, tvb, offset, length, imsi_str);
+    if (!is_imsi_string_valid(imsi_str)) {
+        expert_add_info(pinfo, item, &ei_E212_imsi_malformed);
+    }
 
     subtree = proto_item_add_subtree(item, ett_e212_imsi);
 
@@ -3298,6 +3347,9 @@ dissect_e212_utf8_imsi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int 
     /* Fetch the UTF8-encoded IMSI */
     imsi_str = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, length, ENC_UTF_8);
     item = proto_tree_add_string(tree, hf_E212_imsi, tvb, offset, length, imsi_str);
+    if (!is_imsi_string_valid(imsi_str)) {
+        expert_add_info(pinfo, item, &ei_E212_imsi_malformed);
+    }
 
     subtree = proto_item_add_subtree(item, ett_e212_imsi);
 
@@ -3411,6 +3463,7 @@ proto_register_e212(void)
     static ei_register_info ei[] = {
         { &ei_E212_mcc_non_decimal, { "e212.mcc.non_decimal", PI_MALFORMED, PI_WARN, "MCC contains non-decimal digits", EXPFILL }},
         { &ei_E212_mnc_non_decimal, { "e212.mnc.non_decimal", PI_MALFORMED, PI_WARN, "MNC contains non-decimal digits", EXPFILL }},
+        { &ei_E212_imsi_malformed, { "e212.imsi.malformed", PI_MALFORMED, PI_WARN, "Malformed IMSI", EXPFILL }},
     };
 
     expert_module_t* expert_e212;

@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #ifndef __EXTCAP_PARSER_H__
@@ -76,6 +64,7 @@ typedef enum {
     EXTCAP_PARAM_FILE_EXTENSION,
     EXTCAP_PARAM_PARENT,
     EXTCAP_PARAM_REQUIRED,
+    EXTCAP_PARAM_RELOAD,
     EXTCAP_PARAM_SAVE,
     EXTCAP_PARAM_VALIDATION,
     EXTCAP_PARAM_VERSION,
@@ -119,6 +108,8 @@ typedef struct _extcap_arg {
 
     gboolean is_required;
     gboolean save;
+
+    gboolean reload;
 
     gchar * regexp;
 
@@ -198,6 +189,9 @@ void extcap_free_arg_list(GList *a);
 
 /* Parse all sentences for args and values */
 GList * extcap_parse_args(gchar *output);
+
+/* Parse all sentences for values */
+GList * extcap_parse_values(gchar *output);
 
 /* Parse all sentences for interfaces */
 GList * extcap_parse_interfaces(gchar *output, GList **control_items);

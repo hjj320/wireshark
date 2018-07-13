@@ -11,19 +11,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Ref:  http://jcs.dtic.mil/j6/cceb/acps/acp123/
  */
@@ -478,6 +466,7 @@ static expert_field ei_analysis_ack_dup_no = EI_INIT;
 static expert_field ei_analysis_ack_unexpected = EI_INIT;
 static expert_field ei_analysis_msg_missing = EI_INIT;
 static expert_field ei_analysis_retrans_no = EI_INIT;
+static expert_field ei_too_many_sec_cat = EI_INIT;
 
 static dissector_handle_t dmp_handle;
 
@@ -764,15 +753,11 @@ static const value_string sec_pol[] = {
   { 0x7, "Extended, Mission Defined"         },
   { 0,   NULL } };
 
-#define MAX_NATIONAL_VALUES 56
-/* Will be built in build_national_strings() */
-static value_string nat_pol_id[MAX_NATIONAL_VALUES+1];
-
 /* For name we use the ISO 3166-1 Alfa-3 value for the country,
  * for description we use the Country Name and
  * for value we use the DMP value for National Policy Identifier.
  */
-static const enum_val_t dmp_national_values[MAX_NATIONAL_VALUES+1] = {
+static const enum_val_t dmp_national_values[] = {
   { "???",  "None", 0x00 },
   { "alb",  "Albania", 0x1B },
   { "arm",  "Armenia", 0x20 },
@@ -831,6 +816,10 @@ static const enum_val_t dmp_national_values[MAX_NATIONAL_VALUES+1] = {
   { "weu",  "Western European Union (WEU)", 0x3E },
   { NULL, NULL, 0 }
 };
+
+#define MAX_NATIONAL_VALUES array_length(dmp_national_values)
+/* Will be built in build_national_strings() */
+static value_string nat_pol_id[MAX_NATIONAL_VALUES];
 
 static const value_string ext_sec_cat[] = {
   { 0x0, "Not present"                  },
@@ -1026,18 +1015,15 @@ static gchar *dmp_national_sec_class (guint nation, guint dmp_sec_class)
 
 static void build_national_strings (void)
 {
-  gint i = 0;
+  guint i = 0;
 
   /*
   ** We use values from dmp_national_values to build value_string for nat_pol_id.
   */
-  while (dmp_national_values[i].name && i < MAX_NATIONAL_VALUES) {
+  for (i = 0; i < MAX_NATIONAL_VALUES; i++) {
     nat_pol_id[i].value  = dmp_national_values[i].value;
     nat_pol_id[i].strptr = dmp_national_values[i].description;
-    i++;
   }
-  nat_pol_id[i].value = 0;
-  nat_pol_id[i].strptr = NULL;
 }
 
 static const gchar *get_nat_pol_id_short (gint nation)
@@ -1617,13 +1603,21 @@ static void dmp_add_seq_ack_analysis (tvbuff_t *tvb, packet_info *pinfo,
   }
 }
 
-static gchar *dissect_7bit_string (tvbuff_t *tvb, gint offset, gint length, guchar *byte_rest)
+static const gchar *dissect_7bit_string (tvbuff_t *tvb, gint offset, gint length, guchar *byte_rest)
 {
-  guchar *encoded = (guchar *)tvb_memdup (wmem_packet_scope(), tvb, offset, length);
-  guchar *decoded = (guchar *)wmem_alloc0 (wmem_packet_scope(), (size_t)(length * 1.2) + 1);
+  guchar *encoded, *decoded;
   guchar  rest = 0, bits = 1;
   gint    len = 0, i;
 
+  if (length <= 0) {
+    if (byte_rest) {
+      *byte_rest = '\0';
+    }
+    return "";
+  }
+
+  encoded = (guchar *)tvb_memdup (wmem_packet_scope(), tvb, offset, length);
+  decoded = (guchar *)wmem_alloc0 (wmem_packet_scope(), (size_t)(length * 1.2) + 1);
   for (i = 0; i < length; i++) {
     decoded[len++] = encoded[i] >> bits | rest;
     rest = (encoded[i] << (7 - bits) & 0x7F);
@@ -1640,7 +1634,7 @@ static gchar *dissect_7bit_string (tvbuff_t *tvb, gint offset, gint length, guch
     *byte_rest = rest;
   }
 
-  return (gchar *) decoded;
+  return decoded;
 }
 
 static const gchar *dissect_thales_mts_id (tvbuff_t *tvb, gint offset, gint length, guchar *byte_rest)
@@ -2676,7 +2670,7 @@ static gint dissect_mts_identifier (tvbuff_t *tvb, packet_info *pinfo, proto_tre
     ti = proto_tree_add_string (tree, hf_envelope_mts_id, tvb, offset, dmp.mts_id_length, mts_id);
     hidden_item = proto_tree_add_string (tree, hf_mts_id, tvb, offset, dmp.mts_id_length, mts_id);
     /* Insert into hash, for analysis */
-    wmem_map_insert (dmp_long_id_hash_table, g_strdup (mts_id), GUINT_TO_POINTER ((guint)dmp.msg_id));
+    wmem_map_insert (dmp_long_id_hash_table, wmem_strdup (wmem_file_scope(), mts_id), GUINT_TO_POINTER ((guint)dmp.msg_id));
   }
   PROTO_ITEM_SET_HIDDEN (hidden_item);
   offset += dmp.mts_id_length;
@@ -2732,7 +2726,7 @@ static gint dissect_ipm_identifier (tvbuff_t *tvb, packet_info *pinfo, proto_tre
     ti = proto_tree_add_string (tree, hf_envelope_ipm_id, tvb, offset, ipm_id_length, ipm_id);
     hidden_item = proto_tree_add_string (tree, hf_ipm_id, tvb, offset, ipm_id_length, ipm_id);
     /* Insert into hash, for analysis */
-    wmem_map_insert (dmp_long_id_hash_table, g_strdup (ipm_id), GUINT_TO_POINTER ((guint)dmp.msg_id));
+    wmem_map_insert (dmp_long_id_hash_table, wmem_strdup (wmem_file_scope(), ipm_id), GUINT_TO_POINTER ((guint)dmp.msg_id));
   }
   PROTO_ITEM_SET_HIDDEN (hidden_item);
   offset += ipm_id_length;
@@ -3418,7 +3412,7 @@ static gint dissect_dmp_notification (tvbuff_t *tvb, packet_info *pinfo _U_,
 static gint dissect_dmp_security_category (tvbuff_t *tvb, packet_info *pinfo,
                                            proto_tree *tree,
                                            const gchar **label_string,
-                                           gint offset, guint8 ext)
+                                           gint offset, guint8 *ext)
 {
   proto_tree *field_tree = NULL;
   proto_item *tf = NULL, *tr = NULL;
@@ -3431,7 +3425,7 @@ static gint dissect_dmp_security_category (tvbuff_t *tvb, packet_info *pinfo,
                                    offset, 1, message, "Security Categories");
   field_tree = proto_item_add_subtree (tf, ett_message_sec_cat);
 
-  switch (ext) {
+  switch (*ext) {
 
   case SEC_CAT_EXT_NONE:
     proto_tree_add_item (field_tree, hf_message_sec_cat_cl, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -3485,6 +3479,7 @@ static gint dissect_dmp_security_category (tvbuff_t *tvb, packet_info *pinfo,
   }
 
   proto_item_append_text (tf, " (0x%2.2x)", message);
+  *ext = 0; /* Reset extended bits */
 
   if (dmp.version == 1) {
     tr = proto_tree_add_item (field_tree, hf_reserved_0x02, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -3495,20 +3490,22 @@ static gint dissect_dmp_security_category (tvbuff_t *tvb, packet_info *pinfo,
     if (message & 0x01) {
       expert_add_info(pinfo, tr, &ei_reserved_value);
     }
+    offset += 1;
   } else {
     tr = proto_tree_add_item (field_tree, hf_message_sec_cat_extended, tvb, offset, 1, ENC_BIG_ENDIAN);
     if ((message & 0x01) && (message & 0x02)) {
       expert_add_info(pinfo, tr, &ei_reserved_value);
     } else if (message & 0x01 || message & 0x02) {
       proto_item_append_text (tf, " (extended)");
-      offset = dissect_dmp_security_category (tvb, pinfo, tree, label_string, offset+1, message & 0x03);
+      *ext = message & 0x03;
     }
+    offset += 1;
 
     if (country_code) {
-      proto_tree_add_item (field_tree, hf_message_sec_cat_country_code, tvb, offset+1, 1, ENC_BIG_ENDIAN);
-      proto_item_append_text (tf, " (rel-to country-code: %d)", tvb_get_guint8 (tvb, offset+1));
+      proto_tree_add_item (field_tree, hf_message_sec_cat_country_code, tvb, offset, 1, ENC_BIG_ENDIAN);
+      proto_item_append_text (tf, " (rel-to country-code: %d)", tvb_get_guint8 (tvb, offset));
       proto_item_set_len (tf, 2);
-      offset++;
+      offset += 1;
     }
   }
 
@@ -3718,10 +3715,19 @@ static gint dissect_dmp_content (tvbuff_t *tvb, packet_info *pinfo,
 
   /* Security Categories */
   if (dmp_sec_pol == NATO || dmp_sec_pol == NATIONAL || dmp_sec_pol == EXTENDED_NATIONAL) {
-    offset = dissect_dmp_security_category (tvb, pinfo, message_tree, &label_string, offset, 0);
+    guint8 ext = 0;
+    guint  sec_cat_count = 0;
+    do {
+      offset = dissect_dmp_security_category (tvb, pinfo, message_tree, &label_string, offset, &ext);
+      sec_cat_count++;
+    } while (ext != 0 && sec_cat_count < G_MAXUINT8);
+    if (sec_cat_count == G_MAXUINT8) {
+      /* This is a arbitrary limit to avoid a long dissector loop. */
+      expert_add_info(pinfo, en, &ei_too_many_sec_cat);
+    }
     proto_item_append_text (en, ", Security Label: %s", label_string);
     tf = proto_tree_add_string (message_tree, hf_message_sec_label, tvb, loffset,
-                                offset - loffset + 1, label_string);
+                                offset - loffset, label_string);
     PROTO_ITEM_SET_GENERATED (tf);
   } else {
     tf = proto_tree_add_item (message_tree, hf_message_sec_cat_val, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -3735,8 +3741,8 @@ static gint dissect_dmp_content (tvbuff_t *tvb, packet_info *pinfo,
     proto_tree_add_item (field_tree, hf_message_sec_cat_bit2, tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item (field_tree, hf_message_sec_cat_bit1, tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item (field_tree, hf_message_sec_cat_bit0, tvb, offset, 1, ENC_BIG_ENDIAN);
+    offset += 1;
   }
-  offset += 1;
 
   if (dmp.msg_type == STANAG || dmp.msg_type == IPM) {
     /* Expiry Time */
@@ -4872,6 +4878,9 @@ void proto_register_dmp (void)
     { &ei_checksum_bad,
       { "dmp.checksum_bad.expert", PI_CHECKSUM, PI_WARN,
         "Bad checksum", EXPFILL } },
+    { &ei_too_many_sec_cat,
+      { "dmp.too_many_security_categories", PI_PROTOCOL, PI_ERROR,
+        "Too many security categories", EXPFILL } },
   };
 
   static uat_field_t attributes_flds[] = {

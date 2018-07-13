@@ -8,19 +8,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -560,13 +548,13 @@ dissect_btbredr_rf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
 
     if ((flags & (FLAGS_SIGNAL_POWER_VALID | FLAGS_NOISE_POWER_VALID)) == (FLAGS_SIGNAL_POWER_VALID | FLAGS_NOISE_POWER_VALID)) {
         col_append_fstr(pinfo->cinfo, COL_INFO, " (SP: %4i, NP: %4i)",
-                (gint)(gint8)tvb_get_guint8(tvb, 1), (gint)(gint8)tvb_get_guint8(tvb, 2));
+                (gint)tvb_get_gint8(tvb, 1), (gint)tvb_get_gint8(tvb, 2));
     } else if (flags & FLAGS_SIGNAL_POWER_VALID) {
         col_append_fstr(pinfo->cinfo, COL_INFO, " (SP: %4i)",
-                (gint)(gint8)tvb_get_guint8(tvb, 1));
+                (gint)tvb_get_gint8(tvb, 1));
     } else if (flags & FLAGS_NOISE_POWER_VALID) {
         col_append_fstr(pinfo->cinfo, COL_INFO, " (NP: %4i)",
-                (gint)(gint8)tvb_get_guint8(tvb, 2));
+                (gint)tvb_get_gint8(tvb, 2));
     }
 
    if (flags & FLAGS_PACKET_HEADER_AND_BR_EDR_PAYLOAD_DEWHITENED)

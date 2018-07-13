@@ -5,19 +5,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -29,7 +17,7 @@
 #include <sys/utsname.h>
 #endif
 
-#ifdef HAVE_OS_X_FRAMEWORKS
+#ifdef HAVE_MACOS_FRAMEWORKS
 #include <CoreFoundation/CoreFoundation.h>
 #include <wsutil/cfutils.h>
 #endif
@@ -40,16 +28,12 @@
 
 #include <wsutil/os_version_info.h>
 
-#ifdef _WIN32
-typedef void (WINAPI *nativesi_func_ptr)(LPSYSTEM_INFO);
-#endif
-
 /*
  * Handles the rather elaborate process of getting OS version information
  * from macOS (we want the macOS version, not the Darwin version, the latter
  * being easy to get with uname()).
  */
-#ifdef HAVE_OS_X_FRAMEWORKS
+#ifdef HAVE_MACOS_FRAMEWORKS
 
 /*
  * Fetch a string, as a UTF-8 C string, from a dictionary, given a key.
@@ -73,9 +57,12 @@ get_string_from_dictionary(CFPropertyListRef dict, CFStringRef key)
 /*
  * Get the macOS version information, and append it to the GString.
  * Return TRUE if we succeed, FALSE if we fail.
+ *
+ * XXX - this gives the OS name as "Mac OS X" even if Apple called/calls
+ * it "OS X" or "macOS".
  */
 static gboolean
-get_os_x_version_info(GString *str)
+get_macos_version_info(GString *str)
 {
 	static const UInt8 server_version_plist_path[] =
 	    "/System/Library/CoreServices/ServerVersion.plist";
@@ -199,10 +186,8 @@ void
 get_os_version_info(GString *str)
 {
 #if defined(_WIN32)
-	HMODULE kernel_dll_handle;
 	OSVERSIONINFOEX info;
 	SYSTEM_INFO system_info;
-	nativesi_func_ptr nativesi_func;
 #elif defined(HAVE_SYS_UTSNAME_H)
 	struct utsname name;
 #endif
@@ -237,21 +222,9 @@ get_os_version_info(GString *str)
 	}
 
 	memset(&system_info, '\0', sizeof system_info);
-	/* Look for and use the GetNativeSystemInfo() function if available to get the correct processor
-	 * architecture even when running 32-bit Wireshark in WOW64 (x86 emulation on 64-bit Windows) */
-	kernel_dll_handle = GetModuleHandle(_T("kernel32.dll"));
-	if (kernel_dll_handle == NULL) {
-		/*
-		 * XXX - get the failure reason.
-		 */
-		g_string_append(str, "unknown Windows version");
-		return;
-	}
-	nativesi_func = (nativesi_func_ptr)GetProcAddress(kernel_dll_handle, "GetNativeSystemInfo");
-	if(nativesi_func)
-		nativesi_func(&system_info);
-	else
-		GetSystemInfo(&system_info);
+	/* Look for and use the GetNativeSystemInfo() function to get the correct processor architecture
+	 * even when running 32-bit Wireshark in WOW64 (x86 emulation on 64-bit Windows) */
+	GetNativeSystemInfo(&system_info);
 
 	switch (info.dwPlatformId) {
 
@@ -434,20 +407,20 @@ get_os_version_info(GString *str)
 		 * On *BSD and Darwin/macOS, it's a long string giving
 		 * a build date, config file name, etc., etc., etc..
 		 */
-#ifdef HAVE_OS_X_FRAMEWORKS
+#ifdef HAVE_MACOS_FRAMEWORKS
 		/*
 		 * On macOS, report the macOS version number as the OS
 		 * version if we can, and put the Darwin information
 		 * in parentheses.
 		 */
-		if (get_os_x_version_info(str)) {
+		if (get_macos_version_info(str)) {
 			/* Success - append the Darwin information. */
 			g_string_append_printf(str, " (%s %s)", name.sysname, name.release);
 		} else {
 			/* Failure - just use the Darwin information. */
 			g_string_append_printf(str, "%s %s", name.sysname, name.release);
 		}
-#else /* HAVE_OS_X_FRAMEWORKS */
+#else /* HAVE_MACOS_FRAMEWORKS */
 		/*
 		 * XXX - on Linux, are there any APIs to get the distribution
 		 * name and version number?  I think some distributions have
@@ -498,9 +471,24 @@ get_os_version_info(GString *str)
 		 *
 		 * and the Lib/Platform.py file in recent Python 2.x
 		 * releases.
+		 *
+		 * And then there's
+		 *
+		 *	http://0pointer.de/blog/projects/os-release
+		 *
+		 * which, apparently, is something that all distributions
+		 * with systemd have, which seems to mean "most distributions"
+		 * these days.  It also has a list of several of the assorted
+		 * *other* such files that various distributions have.
+		 *
+		 * Maybe look at what pre-version-43 systemd does?  43
+		 * removed support for the old files, but I guess that
+		 * means older versions *did* support them:
+		 *
+		 *	https://lists.freedesktop.org/archives/systemd-devel/2012-February/004475.html
 		 */
 		g_string_append_printf(str, "%s %s", name.sysname, name.release);
-#endif /* HAVE_OS_X_FRAMEWORKS */
+#endif /* HAVE_MACOS_FRAMEWORKS */
 	}
 #else
 	g_string_append(str, "an unknown OS");

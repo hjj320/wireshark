@@ -4,19 +4,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #ifndef TCP_STREAM_DIALOG_H
@@ -32,8 +20,9 @@
 
 #include "ui/tap-tcp-stream.h"
 
-#include "qcustomplot.h"
-#include <QDialog>
+#include "geometry_state_dialog.h"
+
+#include <ui/qt/widgets/qcustomplot.h>
 #include <QMenu>
 #include <QRubberBand>
 #include <QTimer>
@@ -42,7 +31,7 @@ namespace Ui {
 class TCPStreamDialog;
 }
 
-class TCPStreamDialog : public QDialog
+class TCPStreamDialog : public GeometryStateDialog
 {
     Q_OBJECT
 
@@ -69,6 +58,7 @@ private:
     QMap<double, struct segment *> time_stamp_map_;
     double ts_offset_;
     bool ts_origin_conn_;
+    QMap<double, struct segment *> sequence_num_map_;
     double seq_offset_;
     bool seq_origin_zero_;
     struct tcp_graph graph_;
@@ -82,6 +72,8 @@ private:
     QCPGraph *sack_graph_;
     QCPGraph *sack2_graph_;
     QCPGraph *rwin_graph_;
+    QCPGraph *dup_ack_graph_;
+    QCPGraph *zero_win_graph_;
     QCPItemTracer *tracer_;
     QRectF axis_bounds_;
     guint32 packet_num_;
@@ -150,6 +142,7 @@ private slots:
     void on_otherDirectionButton_clicked();
     void on_dragRadioButton_toggled(bool checked);
     void on_zoomRadioButton_toggled(bool checked);
+    void on_bySeqNumberCheckBox_stateChanged(int state);
     void on_showSegLengthCheckBox_stateChanged(int state);
     void on_showThroughputCheckBox_stateChanged(int state);
     void on_showGoodputCheckBox_stateChanged(int state);
@@ -182,6 +175,7 @@ private slots:
     void on_actionStevens_triggered();
     void on_actionTcptrace_triggered();
     void on_actionWindowScaling_triggered();
+    void on_buttonBox_helpRequested();
 };
 
 #endif // TCP_STREAM_DIALOG_H

@@ -7,19 +7,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 /*
  * It should be compliant to
@@ -412,6 +400,12 @@ static const value_string sctp_payload_proto_id_values[] = {
   { PROTO_3GPP_PUA_PAYLOAD_PROTOCOL_ID,             "3GPP PUA" },
   { WEBRTC_STRING_EMPTY_PAYLOAD_PROTOCOL_ID,        "WebRTC String Empty" },
   { WEBRTC_BINARY_EMPTY_PAYLOAD_PROTOCOL_ID,        "WebRTC Binary Empty" },
+  { XWAP_PROTOCOL_ID,                               "XwAP" },
+  { XW_CONTROL_PLANE_PROTOCOL_ID,                   "Xw - Control Plane" },
+  { NGAP_PROTOCOL_ID,                               "NGAP" },
+  { XNAP_PROTOCOL_ID,                               "XnAP" },
+  { F1AP_PROTOCOL_ID,                               "F1 AP" },
+
   { 0,                                              NULL } };
 
 
@@ -515,11 +509,7 @@ static void *sctp_chunk_type_copy_cb(void* n, const void* o, size_t siz _U_)
 {
   type_field_t* new_rec = (type_field_t*)n;
   const type_field_t* old_rec = (const type_field_t*)o;
-  if (old_rec->type_name) {
-    new_rec->type_name = g_strdup(old_rec->type_name);
-  } else {
-    new_rec->type_name = NULL;
-  }
+  new_rec->type_name = g_strdup(old_rec->type_name);
 
   return new_rec;
 }
@@ -528,7 +518,7 @@ static void
 sctp_chunk_type_free_cb(void* r)
 {
   type_field_t* rec = (type_field_t*)r;
-  if (rec->type_name) g_free(rec->type_name);
+  g_free(rec->type_name);
 }
 
 static gboolean
@@ -709,7 +699,9 @@ find_assoc_index(assoc_info_t* tmpinfo, gboolean visited)
         inf.direction = info->direction;
         return inf;
       } else if ((tmpinfo->verification_tag1 != 0 && tmpinfo->verification_tag1 == info->verification_tag2) ||
-                 (tmpinfo->verification_tag2 != 0 && tmpinfo->verification_tag2 == info->verification_tag1)) {
+                 (tmpinfo->verification_tag2 != 0 && tmpinfo->verification_tag2 == info->verification_tag1) ||
+                 (tmpinfo->verification_tag1 == 0 && tmpinfo->initiate_tag != 0 &&
+                 tmpinfo->initiate_tag == info->verification_tag1)) {
         inf.assoc_index = info->assoc_index;
         if (info->direction == 1)
           inf.direction = 2;
@@ -740,40 +732,44 @@ find_assoc_index(assoc_info_t* tmpinfo, gboolean visited)
 static void
 sctp_src_prompt(packet_info *pinfo, gchar *result)
 {
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "source (%s%u)", UTF8_RIGHTWARDS_ARROW, pinfo->srcport);
+    guint32 port = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_source_port, pinfo->curr_layer_num));
+
+    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "source (%s%u)", UTF8_RIGHTWARDS_ARROW, port);
 }
 
 static gpointer
 sctp_src_value(packet_info *pinfo)
 {
-    return GUINT_TO_POINTER(pinfo->srcport);
+    return p_get_proto_data(pinfo->pool, pinfo, hf_source_port, pinfo->curr_layer_num);
 }
 
 static void
 sctp_dst_prompt(packet_info *pinfo, gchar *result)
 {
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "destination (%s%u)", UTF8_RIGHTWARDS_ARROW, pinfo->destport);
+    guint32 port = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_destination_port, pinfo->curr_layer_num));
+
+    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "destination (%s%u)", UTF8_RIGHTWARDS_ARROW, port);
 }
 
 static gpointer
 sctp_dst_value(packet_info *pinfo)
 {
-    return GUINT_TO_POINTER(pinfo->destport);
+    return p_get_proto_data(pinfo->pool, pinfo, hf_destination_port, pinfo->curr_layer_num);
 }
 
 static void
 sctp_both_prompt(packet_info *pinfo, gchar *result)
 {
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "both (%u%s%u)", pinfo->srcport, UTF8_LEFT_RIGHT_ARROW, pinfo->destport);
+    guint32 srcport = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_source_port, pinfo->curr_layer_num)),
+            destport = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_destination_port, pinfo->curr_layer_num));
+
+    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "both (%u%s%u)", srcport, UTF8_LEFT_RIGHT_ARROW, destport);
 }
 
 static void
 sctp_ppi_prompt1(packet_info *pinfo _U_, gchar* result)
 {
-    guint32 ppid;
-    void *tmp = p_get_proto_data(pinfo->pool, pinfo, proto_sctp, 0);
-
-    ppid = GPOINTER_TO_UINT(tmp);
+    guint32 ppid = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_sctp, 0));
 
     if (ppid == LAST_PPID) {
         g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "PPID (none)");
@@ -785,10 +781,7 @@ sctp_ppi_prompt1(packet_info *pinfo _U_, gchar* result)
 static void
 sctp_ppi_prompt2(packet_info *pinfo _U_, gchar* result)
 {
-    guint32 ppid;
-    void *tmp = p_get_proto_data(pinfo->pool, pinfo, proto_sctp, 1);
-
-    ppid = GPOINTER_TO_UINT(tmp);
+    guint32 ppid = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_sctp, 1));
 
     if (ppid == LAST_PPID) {
         g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "PPID (none)");
@@ -857,7 +850,7 @@ sctp_conversation_packet(void *pct, packet_info *pinfo, epan_dissect_t *edt _U_,
   const struct _sctp_info *sctphdr=(const struct _sctp_info *)vip;
 
   add_conversation_table_data(hash, &sctphdr->ip_src, &sctphdr->ip_dst,
-        sctphdr->sport, sctphdr->dport, 1, pinfo->fd->pkt_len, &pinfo->rel_ts, &pinfo->abs_ts, &sctp_ct_dissector_info, PT_SCTP);
+        sctphdr->sport, sctphdr->dport, 1, pinfo->fd->pkt_len, &pinfo->rel_ts, &pinfo->abs_ts, &sctp_ct_dissector_info, ENDPOINT_SCTP);
 
 
   return 1;
@@ -913,8 +906,8 @@ sctp_hostlist_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, con
   /* Take two "add" passes per packet, adding for each direction, ensures that all
   packets are counted properly (even if address is sending to itself)
   XXX - this could probably be done more efficiently inside hostlist_table */
-  add_hostlist_table_data(hash, &sctphdr->ip_src, sctphdr->sport, TRUE, 1, pinfo->fd->pkt_len, &sctp_host_dissector_info, PT_SCTP);
-  add_hostlist_table_data(hash, &sctphdr->ip_dst, sctphdr->dport, FALSE, 1, pinfo->fd->pkt_len, &sctp_host_dissector_info, PT_SCTP);
+  add_hostlist_table_data(hash, &sctphdr->ip_src, sctphdr->sport, TRUE, 1, pinfo->fd->pkt_len, &sctp_host_dissector_info, ENDPOINT_SCTP);
+  add_hostlist_table_data(hash, &sctphdr->ip_dst, sctphdr->dport, FALSE, 1, pinfo->fd->pkt_len, &sctp_host_dissector_info, ENDPOINT_SCTP);
 
   return 1;
 }
@@ -3263,7 +3256,7 @@ dissect_fragmented_payload(tvbuff_t *payload_tvb, packet_info *pinfo, proto_tree
       proto_name = proto_get_protocol_filter_name(proto_id);
       if(strcmp(proto_name, "data") != 0){
         if (have_tap_listener(exported_pdu_tap)){
-          export_sctp_data_chunk(pinfo,payload_tvb, proto_name);
+          export_sctp_data_chunk(pinfo, new_tvb, proto_name);
         }
       }
     }
@@ -4782,6 +4775,9 @@ dissect_sctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   sctp_info.dport = pinfo->destport;
   set_address(&sctp_info.ip_src, pinfo->src.type, pinfo->src.len, pinfo->src.data);
   set_address(&sctp_info.ip_dst, pinfo->dst.type, pinfo->dst.len, pinfo->dst.data);
+
+  p_add_proto_data(pinfo->pool, pinfo, hf_source_port, pinfo->curr_layer_num, GUINT_TO_POINTER(pinfo->srcport));
+  p_add_proto_data(pinfo->pool, pinfo, hf_destination_port, pinfo->curr_layer_num, GUINT_TO_POINTER(pinfo->destport));
 
   dissect_sctp_packet(tvb, pinfo, tree, FALSE);
   if (!pinfo->flags.in_error_pkt && sctp_info.number_of_tvbs > 0)

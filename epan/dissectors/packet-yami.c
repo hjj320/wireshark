@@ -9,19 +9,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define NEW_PROTO_TREE_API
@@ -253,7 +241,7 @@ dissect_yami_parameter(tvbuff_t *tvb, proto_tree *tree, int offset, proto_item *
 				guint32 val = tvb_get_letohl(tvb, offset);
 
 				for (j = 0; j < 32; j++) {
-					int r = !!(val & (1 << j));
+					int r = !!(val & (1U << j));
 
 					proto_item_append_text(ti, "%s, ", r ? "T" : "F");
 					proto_tree_add_boolean(yami_param, &hfi_yami_param_value_bool, tvb, offset+(j/8), 1, r);

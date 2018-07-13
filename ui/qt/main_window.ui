@@ -126,6 +126,9 @@
      <widget class="FilterExpressionFrame" name="filterExpressionFrame"/>
     </item>
     <item>
+     <widget class="WirelessTimeline" name="wirelessTimelineWidget" native="true"/>
+    </item>
+    <item>
      <widget class="QStackedWidget" name="mainStack">
       <property name="enabled">
        <bool>true</bool>
@@ -141,7 +144,7 @@
      <x>0</x>
      <y>0</y>
      <width>960</width>
-     <height>23</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -351,7 +354,7 @@
     <addaction name="actionViewFilterToolbar"/>
     <addaction name="actionViewWirelessToolbar"/>
     <addaction name="menuInterfaceToolbars"/>
-    <addaction name="menuAdditionalToolbars" />
+    <addaction name="menuAdditionalToolbars"/>
     <addaction name="actionViewStatusBar"/>
     <addaction name="separator"/>
     <addaction name="actionViewFullScreen"/>
@@ -366,6 +369,7 @@
     <addaction name="menuZoom"/>
     <addaction name="separator"/>
     <addaction name="actionViewExpandSubtrees"/>
+    <addaction name="actionViewCollapseSubtrees"/>
     <addaction name="actionViewExpandAll"/>
     <addaction name="actionViewCollapseAll"/>
     <addaction name="separator"/>
@@ -444,6 +448,7 @@
     <addaction name="menuSCTP"/>
     <addaction name="menuFollow"/>
     <addaction name="separator"/>
+    <addaction name="actionAnalyzeShowPacketBytes"/>
     <addaction name="actionAnalyzeExpertInfo"/>
    </widget>
    <widget class="QMenu" name="menuStatistics">
@@ -479,6 +484,7 @@
      <addaction name="actionStatisticsHTTPPacketCounter"/>
      <addaction name="actionStatisticsHTTPRequests"/>
      <addaction name="actionStatisticsHTTPLoadDistribution"/>
+     <addaction name="actionStatisticsHTTPRequestSequences"/>
     </widget>
     <widget class="QMenu" name="menu29West">
      <property name="title">
@@ -510,7 +516,6 @@
        <string>UIM</string>
       </property>
       <addaction name="actionStatistics29WestUIM_Streams"/>
-      <addaction name="actionStatistics29WestUIM_Stream_Flow_Graph"/>
      </widget>
      <addaction name="menu29WestTopics"/>
      <addaction name="menu29WestQueues"/>
@@ -654,6 +659,7 @@
     <addaction name="actionEditTimeShift"/>
     <addaction name="separator"/>
     <addaction name="actionEditPacketComment"/>
+    <addaction name="actionDeleteAllPacketComments"/>
     <addaction name="separator"/>
     <addaction name="actionEditConfigurationProfiles"/>
     <addaction name="actionEditPreferences"/>
@@ -908,7 +914,7 @@
   </action>
   <action name="actionHelpWebsite">
    <property name="icon">
-    <iconset resource="../../image/toolbar.qrc">
+    <iconset resource="../../image/stock_icons.qrc">
      <normaloff>:/menu/help/wsicon16.png</normaloff>:/menu/help/wsicon16.png</iconset>
    </property>
    <property name="text">
@@ -927,7 +933,7 @@
   </action>
   <action name="actionHelpWiki">
    <property name="icon">
-    <iconset resource="../../image/toolbar.qrc">
+    <iconset resource="../../image/stock_icons.qrc">
      <normaloff>:/menu/help/wsicon16.png</normaloff>:/menu/help/wsicon16.png</iconset>
    </property>
    <property name="text">
@@ -952,7 +958,7 @@
   </action>
   <action name="actionHelpAsk">
    <property name="icon">
-    <iconset resource="../../image/toolbar.qrc">
+    <iconset resource="../../image/stock_icons.qrc">
      <normaloff>:/menu/help/wsicon-ask.png</normaloff>:/menu/help/wsicon-ask.png</iconset>
    </property>
    <property name="text">
@@ -1064,6 +1070,20 @@
     <string notr="true">Shift+Right</string>
    </property>
   </action>
+  <action name="actionViewCollapseSubtrees">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Collapse Subtrees</string>
+   </property>
+   <property name="toolTip">
+    <string>Collapse the current packet detail</string>
+   </property>
+   <property name="shortcut">
+    <string notr="true">Shift+Left</string>
+   </property>
+  </action>
   <action name="actionViewExpandAll">
    <property name="text">
     <string>&amp;Expand All</string>
@@ -1154,7 +1174,7 @@
     <string>Export Packet &amp;Bytes…</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+H</string>
+    <string notr="true">Ctrl+Shift+X</string>
    </property>
   </action>
   <action name="actionFileExportSSLSessionKeys">
@@ -1292,12 +1312,15 @@
     <string>Copy this item's description</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+Shift+D</string>
+    <string notr="true">Ctrl+Alt+Shift+D</string>
    </property>
   </action>
   <action name="actionCopyAllVisibleItems">
    <property name="text">
     <string>All Visible Items</string>
+   </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+Alt+Shift+A</string>
    </property>
   </action>
   <action name="actionCopyAllVisibleSelectedTreeItems">
@@ -1313,7 +1336,7 @@
     <string>Copy this item's field name</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+Shift+F</string>
+    <string notr="true">Ctrl+Alt+Shift+F</string>
    </property>
   </action>
   <action name="actionEditCopyValue">
@@ -1324,7 +1347,7 @@
     <string>Copy this item's value</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+Shift+V</string>
+    <string notr="true">Ctrl+Alt+Shift+V</string>
    </property>
   </action>
   <action name="actionEditCopyAsFilter">
@@ -1445,11 +1468,11 @@
    <property name="toolTip">
     <string>Create a packet list column from the selected field.</string>
    </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+Shift+I</string>
+   </property>
   </action>
   <action name="actionEditFindPacket">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
    <property name="text">
     <string>&amp;Find Packet…</string>
    </property>
@@ -1636,6 +1659,14 @@
     <string notr="true">Ctrl+Alt+C</string>
    </property>
   </action>
+  <action name="actionDeleteAllPacketComments">
+   <property name="text">
+    <string>Delete All Packet Comments</string>
+   </property>
+   <property name="toolTip">
+    <string>Remove all packet comments in the capture file</string>
+   </property>
+  </action>
   <action name="actionEditConfigurationProfiles">
    <property name="checkable">
     <bool>false</bool>
@@ -1744,6 +1775,9 @@
    <property name="text">
     <string>TCP Stream</string>
    </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+Alt+Shift+T</string>
+   </property>
   </action>
   <action name="actionAnalyzeFollowUDPStream">
    <property name="enabled">
@@ -1751,6 +1785,9 @@
    </property>
    <property name="text">
     <string>UDP Stream</string>
+   </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+Alt+Shift+U</string>
    </property>
   </action>
   <action name="actionAnalyzeFollowSSLStream">
@@ -1760,6 +1797,9 @@
    <property name="text">
     <string>SSL Stream</string>
    </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+Alt+Shift+S</string>
+   </property>
   </action>
   <action name="actionAnalyzeFollowHTTPStream">
    <property name="enabled">
@@ -1767,6 +1807,9 @@
    </property>
    <property name="text">
     <string>HTTP Stream</string>
+   </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+Alt+Shift+H</string>
    </property>
   </action>
   <action name="actionStatisticsTcpStreamTcptrace">
@@ -1897,6 +1940,14 @@
    </property>
    <property name="toolTip">
     <string>HTTP load distribution</string>
+   </property>
+  </action>
+  <action name="actionStatisticsHTTPRequestSequences">
+   <property name="text">
+    <string>Request Sequences</string>
+   </property>
+   <property name="toolTip">
+    <string>HTTP Request Sequences</string>
    </property>
   </action>
   <action name="actionStatisticsPacketLengths">
@@ -2037,11 +2088,6 @@
   <action name="actionStatistics29WestUIM_Streams">
    <property name="text">
     <string>Streams</string>
-   </property>
-  </action>
-  <action name="actionStatistics29WestUIM_Stream_Flow_Graph">
-   <property name="text">
-    <string>Stream Flow Graph</string>
    </property>
   </action>
   <action name="actionStatistics29WestLBTRM">
@@ -2513,46 +2559,6 @@
     <string>Show the currently supported protocols and display filter fields</string>
    </property>
   </action>
-  <action name="actionContextCopyBytesHexTextDump">
-   <property name="text">
-    <string>Bytes as Hex + ASCII Dump</string>
-   </property>
-   <property name="toolTip">
-    <string>Copy packet bytes as a hex and ASCII dump.</string>
-   </property>
-  </action>
-  <action name="actionContextCopyBytesHexDump">
-   <property name="text">
-    <string>…as Hex Dump</string>
-   </property>
-   <property name="toolTip">
-    <string>Copy packet bytes as a hex dump.</string>
-   </property>
-  </action>
-  <action name="actionContextCopyBytesPrintableText">
-   <property name="text">
-    <string>…as Printable Text</string>
-   </property>
-   <property name="toolTip">
-    <string>Copy only the printable text in the packet.</string>
-   </property>
-  </action>
-  <action name="actionContextCopyBytesHexStream">
-   <property name="text">
-    <string>…as a Hex Stream</string>
-   </property>
-   <property name="toolTip">
-    <string>Copy packet bytes as a stream of hex.</string>
-   </property>
-  </action>
-  <action name="actionContextCopyBytesBinary">
-   <property name="text">
-    <string>…as Raw Binary</string>
-   </property>
-   <property name="toolTip">
-    <string>Copy packet bytes as application/octet-stream MIME data.</string>
-   </property>
-  </action>
   <action name="actionTelephonyGsmMapSummary">
    <property name="text">
     <string>MAP Summary</string>
@@ -2898,9 +2904,12 @@
     <string notr="true">Ctrl+Shift+E</string>
    </property>
   </action>
-  <action name="actionContextShowPacketBytes">
+  <action name="actionAnalyzeShowPacketBytes">
    <property name="text">
     <string>Show Packet Bytes…</string>
+   </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+Shift+O</string>
    </property>
   </action>
   <action name="actionContextWikiProtocolPage">
@@ -2945,7 +2954,7 @@
   </action>
   <action name="actionNewDisplayFilterExpression">
    <property name="icon">
-    <iconset resource="../../image/toolbar.qrc">
+    <iconset resource="../../image/stock_icons.qrc">
      <normaloff>:/stock/plus-8.png</normaloff>:/stock/plus-8.png</iconset>
    </property>
    <property name="text">
@@ -2964,14 +2973,6 @@
    </property>
    <property name="toolTip">
     <string>Create firewall ACL rules</string>
-   </property>
-  </action>
-  <action name="actionContextCopyBytesEscapedString">
-   <property name="text">
-    <string>…as Escaped String</string>
-   </property>
-   <property name="toolTip">
-    <string>Copy packet bytes as a Escaped string</string>
    </property>
   </action>
   <action name="actionViewFullScreen">
@@ -3031,9 +3032,15 @@
    <header>filter_expression_frame.h</header>
    <container>1</container>
   </customwidget>
+  <customwidget>
+   <class>WirelessTimeline</class>
+   <extends>QWidget</extends>
+   <header>wireless_timeline.h</header>
+   <container>1</container>
+  </customwidget>
  </customwidgets>
  <resources>
-  <include location="../../image/toolbar.qrc"/>
+  <include location="../../image/stock_icons.qrc"/>
  </resources>
  <connections>
   <connection>

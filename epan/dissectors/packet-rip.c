@@ -10,19 +10,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #define NEW_PROTO_TREE_API
@@ -40,6 +28,7 @@
 #define RIPv2   2
 
 void proto_register_rip(void);
+void proto_reg_handoff_rip(void);
 
 static const value_string version_vals[] = {
     { RIPv1, "RIPv1" },
@@ -81,9 +70,6 @@ static const value_string rip_auth_type[] = {
 #define MD5_AUTH_DATA_LEN 16
 
 static gboolean pref_display_routing_domain = FALSE;
-
-void proto_reg_handoff_rip(void);
-
 
 static dissector_handle_t rip_handle;
 
@@ -383,7 +369,7 @@ proto_register_rip(void)
     expert_rip = expert_register_protocol(proto_rip);
     expert_register_field_array(expert_rip, ei, array_length(ei));
 
-    rip_module = prefs_register_protocol(proto_rip, proto_reg_handoff_rip);
+    rip_module = prefs_register_protocol(proto_rip, NULL);
 
     prefs_register_bool_preference(rip_module, "display_routing_domain", "Display Routing Domain field", "Display the third and forth bytes of the RIPv2 header as the Routing Domain field (introduced in RFC 1388 [January 1993] and obsolete as of RFC 1723 [November 1994])", &pref_display_routing_domain);
 

@@ -11,19 +11,7 @@
 # By Gerald Combs <gerald@wireshark.org>
 # Copyright 2006 Gerald Combs
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 use strict;
 use warnings;
@@ -43,8 +31,8 @@ my %types = %{{
 	'address' => '{ Address a = (Address)g_malloc(sizeof(address)); copy_address(a, &(v->STR)); pushAddress(L,a); }',
 	'address*' => '{ Address a = (Address)g_malloc(sizeof(address)); copy_address(a, v->STR); pushAddress(L,a); }',
 	'int' => 'lua_pushnumber(L,(lua_Number)v->STR);',
-	'nstime_t' => '{ lua_Number t = (lua_Number) v->STR.secs; t += v->STR.nsecs * 1e-9; lua_pushnumber(L,t); }',
-	'nstime_t*' => '{ lua_Number t = (lua_Number) v->STR->secs; t += v->STR->nsecs * 1e-9; lua_pushnumber(L,t); }',
+	'nstime_t' => 'lua_pushnumber(L,(lua_Number)nstime_to_sec(&(v->STR)));',
+	'nstime_t*' => 'lua_pushnumber(L,(lua_Number)nstime_to_sec(v->STR));'
 }};
 
 my %comments = %{{
@@ -163,6 +151,8 @@ print CFILE  <<"HEADER";
 #include "config.h"
 
 #include "wslua.h"
+
+#include <wsutil/nstime.h>
 
 HEADER
 

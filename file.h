@@ -5,28 +5,16 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #ifndef __FILE_H__
 #define __FILE_H__
 
-#include "wiretap/wtap.h"
 #include <errno.h>
-#include <epan/epan.h>
 
+#include <wiretap/wtap.h>
+#include <epan/epan.h>
 #include <epan/print.h>
 #include <ui/packet_range.h>
 
@@ -75,18 +63,11 @@ typedef enum {
     cf_cb_file_retap_finished,
     cf_cb_file_merge_started, /* Qt only */
     cf_cb_file_merge_finished, /* Qt only */
-    cf_cb_file_fast_save_finished, /* GTK+ only? */
-    cf_cb_packet_selected, /* GTK+ only. */
-    cf_cb_packet_unselected, /* GTK+ only. */
-    cf_cb_field_unselected, /* GTK+ only. */
+    cf_cb_file_fast_save_finished,
     cf_cb_file_save_started,
     cf_cb_file_save_finished,
     cf_cb_file_save_failed,
-    cf_cb_file_save_stopped,
-    cf_cb_file_export_specified_packets_started, /* GTK+ only. */
-    cf_cb_file_export_specified_packets_finished, /* GTK+ only. */
-    cf_cb_file_export_specified_packets_failed, /* GTK+ only. */
-    cf_cb_file_export_specified_packets_stopped /* GTK+ only. */
+    cf_cb_file_save_stopped
 } cf_cbs;
 
 typedef void (*cf_callback_t) (gint event, gpointer data, gpointer user_data);
@@ -164,13 +145,13 @@ cf_read_status_t cf_read(capture_file *cf, gboolean from_save);
  *
  * @param cf the capture file from which to read the record
  * @param fdata the frame_data structure for the record in question
- * @param phdr pointer to a wtap_pkthdr structure to contain the
+ * @param rec pointer to a wtap_rec structure to contain the
  * record's metadata
  * @param buf a Buffer into which to read the record's raw data
  * @return TRUE if the read succeeded, FALSE if there was an error
  */
 gboolean cf_read_record_r(capture_file *cf, const frame_data *fdata,
-                          struct wtap_pkthdr *phdr, Buffer *buf);
+                          wtap_rec *rec, Buffer *buf);
 
 /**
  * Read the metadata and raw data for a record into a
@@ -391,7 +372,7 @@ cf_status_t cf_filter_packets(capture_file *cf, gchar *dfilter, gboolean force);
 void cf_reftime_packets(capture_file *cf);
 
 /**
- * Return the time it took to load the file
+ * Return the time it took to load the file (in msec).
  */
 gulong cf_get_computed_elapsed(capture_file *cf);
 
@@ -619,13 +600,6 @@ void cf_select_packet(capture_file *cf, int row);
 void cf_unselect_packet(capture_file *cf);
 
 /**
- * Unselect all protocol tree fields, if any.
- *
- * @param cf the capture file
- */
-void cf_unselect_field(capture_file *cf);
-
-/**
  * Mark a particular frame in a particular capture.
  *
  * @param cf the capture file
@@ -678,20 +652,30 @@ cf_merge_files_to_tempfile(gpointer pd_window, char **out_filenamep,
 
 /**
  * Get the comment on a capture from the SHB data block
+ * XXX - should support multiple sections.
  *
  * @param cf the capture file
  */
-const gchar* cf_read_shb_comment(capture_file *cf);
+const gchar* cf_read_section_comment(capture_file *cf);
 
 /**
  * Update(replace) the comment on a capture from the SHB data block
+ * XXX - should support multiple sections.
  *
  * @param cf the capture file
  * @param comment the string replacing the old comment
  */
-void cf_update_capture_comment(capture_file *cf, gchar *comment);
+void cf_update_section_comment(capture_file *cf, gchar *comment);
 
-char *cf_get_comment(capture_file *cf, const frame_data *fd);
+/*
+ * Get the comment on a packet (record).
+ * If the comment has been edited, it returns the result of the edit,
+ * otherwise it returns the comment from the file.
+ *
+ * @param cf the capture file
+ * @param fd the frame_data structure for the frame
+ */
+char *cf_get_packet_comment(capture_file *cf, const frame_data *fd);
 
 /**
  * Update(replace) the comment on a capture from a frame
@@ -719,18 +703,6 @@ guint32 cf_comment_types(capture_file *cf);
  * @return TRUE if it succeeds, FALSE if not
  */
 gboolean cf_add_ip_name_from_string(capture_file *cf, const char *addr, const char *name);
-
-#ifdef WANT_PACKET_EDITOR
-/**
- * Give a frame new, edited data.
- *
- * @param cf the capture file
- * @param fd frame_data structure for the frame
- * @param phdr the struct wtap_pkthdr for the frame
- * @param pd the raw packet data for the frame
- */
-void cf_set_frame_edited(capture_file *cf, frame_data *fd, struct wtap_pkthdr *phdr, guint8 *pd);
-#endif
 
 #ifdef __cplusplus
 }

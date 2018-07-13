@@ -23,19 +23,7 @@
  * Derived from code in the Wiretap Library
  * Copyright (c) 1998 by Gilbert Ramirez <gram@alumni.rice.edu>
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include <config.h>
@@ -240,7 +228,7 @@ libpcap_write_packet(FILE* pfile,
         return write_to_file(pfile, pd, caplen, bytes_written, err);
 }
 
-/* Writing pcap-ng files */
+/* Writing pcapng files */
 
 static guint32
 pcapng_count_string_option(const char *option_value)
@@ -282,6 +270,34 @@ pcapng_write_string_option(FILE* pfile,
                 }
         }
         return TRUE;
+}
+
+/* Write a pre-formatted pcapng block directly to the output file */
+gboolean
+pcapng_write_block(FILE* pfile,
+                   const guint8 *data,
+                   guint32 length,
+                   guint64 *bytes_written,
+                   int *err)
+{
+    guint32 block_length, end_lenth;
+    /* Check
+     * - length and data are aligned to 4 bytes
+     * - block_total_length field is the same at the start and end of the block
+     *
+     * The block_total_length is not checked against the provided length but
+     * getting the trailing block_total_length from the length argument gives
+     * us an implicit check of correctness without needing to do an endian swap
+     */
+    if (((length & 3) != 0) || (((gintptr)data & 3) != 0)) {
+        return FALSE;
+    }
+    memcpy(&block_length, data+sizeof(guint32), sizeof(guint32));
+    memcpy(&end_lenth, data+length-sizeof(guint32), sizeof(guint32));
+    if (block_length != end_lenth) {
+        return FALSE;
+    }
+    return write_to_file(pfile, data, length, bytes_written, err);
 }
 
 gboolean
@@ -550,20 +566,18 @@ pcapng_write_enhanced_packet_block(FILE* pfile,
         if(caplen % 4) {
             pad_len = 4 - (caplen % 4);
         }
+        /*
+         * If we have no options to write, just write out the padding and
+         * the block total length with one fwrite() call.
+         */
         if(!comment && flags == 0 && options_length==0){
             /* Put padding in the buffer */
             for (i = 0; i < pad_len; i++) {
                 buff[i] = 0;
             }
             /* Write the total length */
-            buff[i] = (block_total_length & 0x000000ff);
-            i++;
-            buff[i] = (block_total_length & 0x0000ff00) >> 8;
-            i++;
-            buff[i] = (block_total_length & 0x00ff0000) >> 16;
-            i++;
-            buff[i] = (block_total_length & 0xff000000) >> 24;
-            i++;
+            memcpy(&buff[i], &block_total_length, sizeof(guint32));
+            i += sizeof(guint32);
             return write_to_file(pfile, (const guint8*)&buff, i, bytes_written, err);
         }
         if (pad_len) {

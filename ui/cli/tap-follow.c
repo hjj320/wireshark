@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 /* This module provides udp and tcp follow stream capabilities to tshark.
@@ -51,8 +39,10 @@ typedef struct _cli_follow_info {
   int           stream_index;
   int           port[2];
   address       addr[2];
-  guint8        addrBuf[2][16];
-
+  union {
+    guint32           addrBuf_v4;
+    ws_in6_addr addrBuf_v6;
+  }             addrBuf[2];
 } cli_follow_info_t;
 
 
@@ -169,7 +159,7 @@ static void follow_draw(void *contextp)
 
   follow_info_t *follow_info = (follow_info_t*)contextp;
   cli_follow_info_t* cli_follow_info = (cli_follow_info_t*)follow_info->gui_data;
-  gchar             buf[MAX_IP6_STR_LEN];
+  gchar             buf[WS_INET6_ADDRSTRLEN];
   guint32 global_client_pos = 0, global_server_pos = 0;
   guint32 *global_pos;
   guint32           ii, jj;
@@ -373,19 +363,19 @@ follow_arg_filter(const char **opt_argp, follow_info_t *follow_info)
 
       if (is_ipv6)
       {
-        if (!get_host_ipaddr6(addr, (struct e_in6_addr *)cli_follow_info->addrBuf[ii]))
+        if (!get_host_ipaddr6(addr, &cli_follow_info->addrBuf[ii].addrBuf_v6))
         {
           follow_exit("Can't get IPv6 address");
         }
-        set_address(&cli_follow_info->addr[ii], AT_IPv6, 16, cli_follow_info->addrBuf[ii]);
+        set_address(&cli_follow_info->addr[ii], AT_IPv6, 16, (void *)&cli_follow_info->addrBuf[ii].addrBuf_v6);
       }
       else
       {
-        if (!get_host_ipaddr(addr, (guint32 *)cli_follow_info->addrBuf[ii]))
+        if (!get_host_ipaddr(addr, &cli_follow_info->addrBuf[ii].addrBuf_v4))
         {
           follow_exit("Can't get IPv4 address");
         }
-        set_address(&cli_follow_info->addr[ii], AT_IPv4, 4, cli_follow_info->addrBuf[ii]);
+        set_address(&cli_follow_info->addr[ii], AT_IPv4, 4, (void *)&cli_follow_info->addrBuf[ii].addrBuf_v4);
       }
 
       *opt_argp += len;
@@ -497,15 +487,17 @@ follow_register(const void *key _U_, void *value, void *userdata _U_)
 {
   register_follow_t *follower = (register_follow_t*)value;
   stat_tap_ui follow_ui;
+  gchar *cli_string;
 
+  cli_string = follow_get_stat_tap_string(follower);
   follow_ui.group = REGISTER_STAT_GROUP_GENERIC;
   follow_ui.title = NULL;   /* construct this from the protocol info? */
-  follow_ui.cli_string = follow_get_stat_tap_string(follower);
+  follow_ui.cli_string = cli_string;
   follow_ui.tap_init_cb = follow_stream;
   follow_ui.nparams = 0;
   follow_ui.params = NULL;
   register_stat_tap_ui(&follow_ui, follower);
-  g_free((char*)follow_ui.cli_string);
+  g_free(cli_string);
   return FALSE;
 }
 

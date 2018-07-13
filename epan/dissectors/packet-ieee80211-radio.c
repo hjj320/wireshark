@@ -10,19 +10,7 @@
  *
  * Copied from README.developer
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -32,8 +20,10 @@
 #include <wiretap/wtap.h>
 #include <epan/prefs.h>
 #include <epan/proto_data.h>
+#include <epan/tap.h>
 
 #include "packet-ieee80211.h"
+#include "packet-ieee80211-radio.h"
 #include "math.h"
 
 void proto_register_ieee80211_radio(void);
@@ -104,9 +94,12 @@ static expert_field ei_wlan_radio_assumed_no_stbc = EI_INIT;
 static expert_field ei_wlan_radio_assumed_no_extension_streams = EI_INIT;
 static expert_field ei_wlan_radio_assumed_bcc_fec = EI_INIT;
 
+static int wlan_radio_timeline_tap = -1;
+
 /* Settings */
 static gboolean wlan_radio_always_short_preamble = FALSE;
 static gboolean wlan_radio_tsf_at_end = TRUE;
+static gboolean wlan_radio_timeline_enabled = FALSE;
 
 static const value_string phy_vals[] = {
     { PHDR_802_11_PHY_11_FHSS,       "802.11 FHSS" },
@@ -382,31 +375,12 @@ static gint ett_wlan_radio_11ac_user = -1;
 static gint ett_wlan_radio_duration = -1;
 static gint ett_wlan_radio_aggregate = -1;
 
-struct aggregate {
-  guint phy;
-  union ieee_802_11_phy_info phy_info;
-  gint8 rssi; /* sometimes only available on the last frame */
-  guint duration; /* total duration of data in microseconds (without preamble) */
-};
-
-struct wlan_radio {
-  struct aggregate *aggregate; /* if this frame is part of an aggregate, point to it, otherwise NULL */
-  guint prior_aggregate_data; /* length of all prior data in this aggregate
-                                 used for calculating duration of this subframe */
-  guint64 start_tsf;
-  guint64 end_tsf;
-
-  guint64 ifs; /* inter frame space in microseconds */
-
-  guint16 nav;
-  gint8 rssi;
-};
-
 /* previous frame details, for aggregate detection */
 struct previous_frame_info {
   gboolean has_tsf_timestamp;
   guint64 tsf_timestamp;
   guint phy;
+  union ieee_802_11_phy_info phy_info;
   guint prev_length;
   struct wlan_radio *radio_info;
 };
@@ -457,6 +431,8 @@ static void adjust_agg_tsf(gpointer data, gpointer user_data)
 
   wlan_radio_info->start_tsf += (*ppdu_start);
   wlan_radio_info->end_tsf += (*ppdu_start);
+  if (wlan_radio_info->prior_aggregate_data == 0)
+	  wlan_radio_info->ifs += (*ppdu_start);
 }
 
 /*
@@ -480,6 +456,7 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
 
   /* durations in microseconds */
   guint preamble = 0, agg_preamble = 0; /* duration of plcp */
+  gboolean have_duration = FALSE;
   guint duration = 0; /* duration of whole frame (plcp + mac data + any trailing parts) */
   guint prior_duration = 0; /* duration of previous part of aggregate */
 
@@ -528,16 +505,15 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
         phdr->has_tsf_timestamp && previous_frame.has_tsf_timestamp &&
         (phdr->tsf_timestamp == previous_frame.tsf_timestamp || /* find matching TSFs */
          (!current_aggregate && previous_frame.tsf_timestamp && phdr->tsf_timestamp == 0) || /* Intel detect second frame */
-         (previous_frame.tsf_timestamp == 0xFFFFFFFFFFFFFFFF) /* QCA, detect last frame */
+         (previous_frame.tsf_timestamp == G_MAXUINT64) /* QCA, detect last frame */
         )) {
       /* we're in an aggregate */
       if (!current_aggregate) {
         /* this is the second frame in an aggregate
          * where we first detect the aggregate */
         current_aggregate = wmem_new0(wmem_file_scope(), struct aggregate);
-        /* TODO work around macbook FCS frame PHY errors here */
-        current_aggregate->phy = phdr->phy;
-        current_aggregate->phy_info = phdr->phy_info;
+        current_aggregate->phy = previous_frame.phy;
+        current_aggregate->phy_info = previous_frame.phy_info;
 
         /* go back to the first frame in the aggregate,
          * and mark it as part of this aggregate */
@@ -557,9 +533,34 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
       wlan_radio_info->prior_aggregate_data = previous_frame.prev_length;
       previous_frame.prev_length += frame_length;
 
-      /* TODO work around macbook FCS frame PHY errors - check phy/fcs and
-       * update if necessary */
+      /* work around macbook/QCA FCS error frame PHY rate bug here
+       * Some Macbook generators and some QCA generators erroneously report
+       * low PHY rates for some subframes within an aggregate that have FCS errors.
+       * All subframes must have the same PHY rate.
+       * Here we take the highest reported rate for the aggregate. */
+      switch (phdr->phy) {
+      case PHDR_802_11_PHY_11N:
+        {
+          struct ieee_802_11n *info_n = &phy_info->info_11n;
+          struct ieee_802_11n *agg_info_n = &current_aggregate->phy_info.info_11n;
 
+          if (info_n->has_mcs_index && agg_info_n->has_mcs_index &&
+              info_n->mcs_index > agg_info_n->mcs_index)
+              current_aggregate->phy_info = *phy_info;
+        }
+        break;
+
+      case PHDR_802_11_PHY_11AC:
+        {
+          struct ieee_802_11ac *info_ac = &phy_info->info_11ac;
+          struct ieee_802_11ac *agg_info_ac = &current_aggregate->phy_info.info_11ac;
+
+          if (info_ac->mcs[0] > agg_info_ac->mcs[0])
+              current_aggregate->phy_info = *phy_info;
+        }
+        break;
+      }
+      /* TODO record a warning if the PHY rate does not match the aggregate */
       phy = current_aggregate->phy;
       phy_info = &current_aggregate->phy_info;
     } else {
@@ -569,6 +570,7 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
     previous_frame.has_tsf_timestamp = phdr->has_tsf_timestamp;
     previous_frame.tsf_timestamp = phdr->tsf_timestamp;
     previous_frame.phy = phdr->phy;
+    previous_frame.phy_info = phdr->phy_info;
   } else {
     /* this frame has already been seen, so get its info structure */
     wlan_radio_info = (struct wlan_radio *) p_get_proto_data(wmem_file_scope(), pinfo, proto_wlan_radio, 0);
@@ -899,8 +901,18 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
       data_rate == 5.5f || data_rate == 11.0f ||
       data_rate == 22.0f || data_rate == 33.0f)) {
       phy = PHDR_802_11_PHY_11B;
+    } else if (phy == PHDR_802_11_PHY_UNKNOWN &&
+      (data_rate == 1.0f || data_rate == 2.0f ||
+      data_rate == 5.5f || data_rate == 11.0f ||
+      data_rate == 22.0f || data_rate == 33.0f)) {
+      phy = PHDR_802_11_PHY_11B;
+    } else if (phy == PHDR_802_11_PHY_UNKNOWN &&
+      (data_rate == 6.0f || data_rate == 9.0f ||
+       data_rate == 12.0f || data_rate == 18.0f ||
+       data_rate == 24.0f || data_rate == 36.0f ||
+       data_rate == 48.0f || data_rate == 54.0f)) {
+      phy = PHDR_802_11_PHY_11A;
     }
-
     switch (phy) {
 
     case PHDR_802_11_PHY_11_FHSS:
@@ -921,6 +933,7 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
        * - rate
        */
       /* round up to whole microseconds */
+      have_duration = TRUE;
       duration = (guint) ceil(preamble + frame_length * 8 / data_rate);
       break;
 
@@ -941,13 +954,14 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
       guint bits = 16 + 8 * frame_length + 6;
       guint symbols = (guint) ceil(bits / (data_rate * 4));
 
+      have_duration = TRUE;
       duration = preamble + symbols * 4;
       break;
     }
 
     case PHDR_802_11_PHY_11N:
     {
-      struct ieee_802_11n *info_n = &phdr->phy_info.info_11n;
+      struct ieee_802_11n *info_n = &phy_info->info_11n;
 
       /* We have all the fields required to calculate the duration */
       static const guint Nhtdltf[4] = {1, 2, 4, 4};
@@ -1026,17 +1040,9 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
         assumed_no_stbc = TRUE;
       }
 
-      if (info_n->has_ness) {
-        ness = info_n->ness;
-      } else {
-        ness = 0;
+      if (!info_n->has_ness) {
         assumed_no_extension_streams = TRUE;
       }
-
-      /* calculate number of HT-LTF training symbols.
-       * see ieee80211n-2009 20.3.9.4.6 table 20-11 */
-      Nsts = ieee80211_ht_streams[info_n->mcs_index] + stbc_streams;
-      preamble += 4 * (Nhtdltf[Nsts-1] + Nhteltf[ness]);
 
       if (!info_n->has_fec) {
         assumed_bcc_fec = TRUE;
@@ -1049,10 +1055,12 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
           preamble = 0;
         }
         prior_duration = calculate_11n_duration(wlan_radio_info->prior_aggregate_data, info_n, stbc_streams);
+        have_duration = TRUE;
         duration = preamble +
           calculate_11n_duration(frame_length + wlan_radio_info->prior_aggregate_data, info_n, stbc_streams)
           - prior_duration;
       } else {
+        have_duration = TRUE;
         duration = preamble + calculate_11n_duration(frame_length, info_n, stbc_streams);
       }
       break;
@@ -1073,42 +1081,45 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
           preamble = 0;
         }
         prior_duration = calculate_11ac_duration(wlan_radio_info->prior_aggregate_data, data_rate);
+        have_duration = TRUE;
         duration = preamble +
           calculate_11ac_duration(wlan_radio_info->prior_aggregate_data + frame_length, data_rate)
           - prior_duration;
       } else {
+        have_duration = TRUE;
         duration = preamble + calculate_11ac_duration(frame_length, data_rate);
       }
       break;
     }
     }
 
-    if (!pinfo->fd->flags.visited && duration && phdr->has_tsf_timestamp) {
+    if (!pinfo->fd->flags.visited && have_duration && phdr->has_tsf_timestamp) {
       if (current_aggregate) {
         current_aggregate->duration = agg_preamble + prior_duration + duration;
         if (previous_frame.radio_info && previous_frame.radio_info->aggregate == current_aggregate)
           previous_frame.radio_info->nav = 0; // don't display NAV except for last frame in an aggregate
       }
-      if (phdr->tsf_timestamp == 0xFFFFFFFFFFFFFFFF) {
+      if (phdr->tsf_timestamp == G_MAXUINT64) {
         /* QCA aggregate, we don't know tsf yet */
-        wlan_radio_info->start_tsf = prior_duration;
-        wlan_radio_info->end_tsf = prior_duration + duration;
+        wlan_radio_info->start_tsf = prior_duration + (current_aggregate ? agg_preamble : 0);
+        wlan_radio_info->end_tsf = prior_duration + duration + (current_aggregate ? agg_preamble : 0);
         if (agg_tracker_list == NULL) {
           agg_tracker_list = wmem_list_new(NULL);
         }
         wmem_list_append(agg_tracker_list, wlan_radio_info);
-      } else if (current_aggregate && wlan_radio_tsf_at_end && phdr->tsf_timestamp != 0xFFFFFFFFFFFFFFFF) {
+      } else if (current_aggregate && wlan_radio_tsf_at_end && phdr->tsf_timestamp != G_MAXUINT64) {
         /* QCA aggregate, last frame */
-        guint64 ppdu_start = phdr->tsf_timestamp - current_aggregate->duration;
         wlan_radio_info->start_tsf = phdr->tsf_timestamp - duration;
         wlan_radio_info->end_tsf = phdr->tsf_timestamp;
         /* fix up the tsfs for the prior MPDUs */
         if (agg_tracker_list != NULL) {
+          guint64 ppdu_start = phdr->tsf_timestamp - (prior_duration + duration + agg_preamble);
           wmem_list_foreach(agg_tracker_list, adjust_agg_tsf, &ppdu_start);
           wmem_destroy_list(agg_tracker_list);
-        }
+          agg_tracker_list = NULL;
+        };
       } else if (wlan_radio_tsf_at_end) {
-        wlan_radio_info->start_tsf = phdr->tsf_timestamp - duration - preamble;
+        wlan_radio_info->start_tsf = phdr->tsf_timestamp - duration;
         wlan_radio_info->end_tsf = phdr->tsf_timestamp;
       } else {
         wlan_radio_info->start_tsf = phdr->tsf_timestamp + prior_duration - preamble;
@@ -1130,7 +1141,7 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
       }
     }
 
-    if (duration) {
+    if (have_duration) {
       proto_item *item = proto_tree_add_uint(radio_tree, hf_wlan_radio_duration, tvb, 0, 0, duration);
       proto_tree *d_tree = proto_item_add_subtree(item, ett_wlan_radio_duration);
       PROTO_ITEM_SET_GENERATED(item);
@@ -1164,7 +1175,7 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
         }
       }
       if (wlan_radio_info->ifs) {
-        p_item = proto_tree_add_uint64(d_tree, hf_wlan_radio_ifs, tvb, 0, 0, wlan_radio_info->ifs);
+        p_item = proto_tree_add_int64(d_tree, hf_wlan_radio_ifs, tvb, 0, 0, wlan_radio_info->ifs);
         PROTO_ITEM_SET_GENERATED(p_item);
         /* TODO: warnings on unusual IFS values (too small or negative) */
       }
@@ -1178,6 +1189,14 @@ dissect_wlan_radio_phdr (tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
       }
     }
   } /* if (have_data_rate) */
+
+  if (wlan_radio_timeline_enabled) {
+    tap_queue_packet(wlan_radio_timeline_tap, pinfo, wlan_radio_info);
+  }
+
+  if (!pinfo->fd->flags.visited) {
+    previous_frame.radio_info = wlan_radio_info;
+  }
 }
 
 /*
@@ -1373,7 +1392,7 @@ void proto_register_ieee80211_radio(void)
 
     {&hf_wlan_radio_timestamp,
      {"TSF timestamp", "wlan_radio.timestamp", FT_UINT64, BASE_DEC, NULL, 0,
-      NULL, HFILL }},
+      "Timing Synchronization Function timestamp", HFILL }},
 
     {&hf_wlan_last_part_of_a_mpdu,
      {"Last part of an A-MPDU", "wlan_radio.last_part_of_an_ampdu", FT_BOOLEAN, 32, NULL, PHDR_802_11_LAST_PART_OF_A_MPDU,
@@ -1401,16 +1420,16 @@ void proto_register_ieee80211_radio(void)
       "MPDU is part of an A-MPDU", HFILL }},
 
     {&hf_wlan_radio_ifs,
-     {"IFS", "wlan_radio.ifs", FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0,
+     {"IFS", "wlan_radio.ifs", FT_INT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0,
       "Inter Frame Space before this frame in microseconds, calculated from PHY data", HFILL }},
 
     {&hf_wlan_radio_start_tsf,
      {"Start", "wlan_radio.start_tsf", FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0,
-      "Duration of the PLCP or preamble in microseconds, calculated from PHY data", HFILL }},
+      "Calculated start time of the frame", HFILL }},
 
     {&hf_wlan_radio_end_tsf,
      {"End", "wlan_radio.end_tsf", FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0,
-      "Duration of the PLCP or preamble in microseconds, calculated from PHY data", HFILL }},
+      "Calculated end time of the frame", HFILL }},
 
     {&hf_wlan_radio_aggregate_duration,
      {"Duration", "wlan_radio.aggregate.duration", FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0,
@@ -1471,6 +1490,10 @@ void proto_register_ieee80211_radio(void)
     "TSF indicates the end of the PPDU",
     "Some generators timestamp the end of the PPDU rather than the start of the (A)MPDU.",
     &wlan_radio_tsf_at_end);
+  prefs_register_bool_preference(wlan_radio_module, "timeline",
+    "Enable Wireless Timeline (experimental)",
+    "Enables an additional panel for navigating through packets",
+    &wlan_radio_timeline_enabled);
 
   register_init_routine( setup_ieee80211_radio );
   register_cleanup_routine( cleanup_ieee80211_radio );
@@ -1483,6 +1506,8 @@ void proto_reg_handoff_ieee80211_radio(void)
                      wlan_radio_handle);
   ieee80211_handle = find_dissector_add_dependency("wlan", proto_wlan_radio);
   ieee80211_noqos_handle = find_dissector_add_dependency("wlan_noqos", proto_wlan_radio);
+
+  wlan_radio_timeline_tap = register_tap("wlan_radio_timeline");
 }
 
 /*

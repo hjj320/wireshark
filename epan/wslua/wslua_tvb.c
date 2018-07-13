@@ -12,19 +12,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -66,9 +54,12 @@ WSLUA_CLASS_DEFINE(Tvb,FAIL_ON_NULL_OR_EXPIRED("Tvb"));
    To create a `TvbRange` the `Tvb` must be called with offset and length as optional arguments;
    the offset defaults to 0 and the length to `tvb:len()`.
 
-   @warning Tvbs are usable only by the current listener or dissector call and are destroyed
+   [WARNING]
+   ====
+   Tvbs are usable only by the current listener or dissector call and are destroyed
    as soon as the listener/dissector returns, so references to them are unusable once the function
    has returned.
+   ====
 */
 
 static GPtrArray* outstanding_Tvb = NULL;
@@ -584,16 +575,16 @@ WSLUA_METHOD TvbRange_int(lua_State* L) {
 
     switch (tvbr->len) {
         case 1:
-            lua_pushnumber(L,(gchar)tvb_get_guint8(tvbr->tvb->ws_tvb,tvbr->offset));
+            lua_pushnumber(L,tvb_get_gint8(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 2:
-            lua_pushnumber(L,(gshort)tvb_get_ntohs(tvbr->tvb->ws_tvb,tvbr->offset));
+            lua_pushnumber(L,tvb_get_ntohis(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 3:
-            lua_pushnumber(L,(gint)tvb_get_ntoh24(tvbr->tvb->ws_tvb,tvbr->offset));
+            lua_pushnumber(L,tvb_get_ntohi24(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 4:
-            lua_pushnumber(L,(gint)tvb_get_ntohl(tvbr->tvb->ws_tvb,tvbr->offset));
+            lua_pushnumber(L,tvb_get_ntohil(tvbr->tvb->ws_tvb,tvbr->offset));
             WSLUA_RETURN(1); /* The signed integer value */
             /*
              * XXX:
@@ -623,16 +614,16 @@ WSLUA_METHOD TvbRange_le_int(lua_State* L) {
 
     switch (tvbr->len) {
         case 1:
-            lua_pushnumber(L,(gchar)tvb_get_guint8(tvbr->tvb->ws_tvb,tvbr->offset));
+            lua_pushnumber(L,tvb_get_gint8(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 2:
-            lua_pushnumber(L,(gshort)tvb_get_letohs(tvbr->tvb->ws_tvb,tvbr->offset));
+            lua_pushnumber(L,tvb_get_letohis(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 3:
-            lua_pushnumber(L,(gint)tvb_get_letoh24(tvbr->tvb->ws_tvb,tvbr->offset));
+            lua_pushnumber(L,tvb_get_letohi24(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 4:
-            lua_pushnumber(L,(gint)tvb_get_letohl(tvbr->tvb->ws_tvb,tvbr->offset));
+            lua_pushnumber(L,tvb_get_letohil(tvbr->tvb->ws_tvb,tvbr->offset));
             WSLUA_RETURN(1); /* The signed integer value. */
         default:
             luaL_error(L,"TvbRange:le_int() does not handle %d byte integers",tvbr->len);
@@ -655,28 +646,28 @@ WSLUA_METHOD TvbRange_int64(lua_State* L) {
 
     switch (tvbr->len) {
         case 1:
-            pushInt64(L,(gint8)tvb_get_guint8(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_gint8(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 2:
-            pushInt64(L,(gint16)tvb_get_ntohs(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_ntohis(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 3:
-            pushInt64(L,(gint)tvb_get_ntoh24(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_ntohi24(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 4:
-            pushInt64(L,(gint32)tvb_get_ntohl(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_ntohil(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 5:
-            pushInt64(L,(gint64)tvb_get_ntoh40(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_ntohi40(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 6:
-            pushInt64(L,(gint64)tvb_get_ntoh48(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_ntohi48(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 7:
-            pushInt64(L,(gint64)tvb_get_ntoh56(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_ntohi56(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 8:
-            pushInt64(L,(gint64)tvb_get_ntoh64(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_ntohi64(tvbr->tvb->ws_tvb,tvbr->offset));
             WSLUA_RETURN(1); /* The `Int64` object. */
         default:
             luaL_error(L,"TvbRange:int64() does not handle %d byte integers",tvbr->len);
@@ -699,28 +690,28 @@ WSLUA_METHOD TvbRange_le_int64(lua_State* L) {
 
     switch (tvbr->len) {
         case 1:
-            pushInt64(L,(gint8)tvb_get_guint8(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_gint8(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 2:
-            pushInt64(L,(gint16)tvb_get_letohs(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_letohis(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 3:
-            pushInt64(L,(gint)tvb_get_letoh24(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_letohi24(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 4:
-            pushInt64(L,(gint32)tvb_get_letohl(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_letohil(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 5:
-            pushInt64(L,(gint64)tvb_get_letoh40(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_letohi40(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 6:
-            pushInt64(L,(gint64)tvb_get_letoh48(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_letohi48(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 7:
-            pushInt64(L,(gint64)tvb_get_letoh56(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_letohi56(tvbr->tvb->ws_tvb,tvbr->offset));
             return 1;
         case 8:
-            pushInt64(L,(gint64)tvb_get_letoh64(tvbr->tvb->ws_tvb,tvbr->offset));
+            pushInt64(L,tvb_get_letohi64(tvbr->tvb->ws_tvb,tvbr->offset));
             WSLUA_RETURN(1); /* The `Int64` object. */
         default:
             luaL_error(L,"TvbRange:le_int64() does not handle %d byte integers",tvbr->len);
@@ -883,6 +874,11 @@ WSLUA_METHOD TvbRange_nstime(lua_State* L) {
         return 0;
     }
 
+    if (encoding & ~ENC_STR_TIME_MASK) {
+        WSLUA_OPTARG_ERROR(TvbRange_nstime, ENCODING, "invalid encoding value");
+        return 0;
+    }
+
     nstime = g_new(nstime_t,1);
 
     if (encoding == 0) {
@@ -899,9 +895,6 @@ WSLUA_METHOD TvbRange_nstime(lua_State* L) {
         }
         pushNSTime(L, nstime);
         lua_pushinteger(L, tvbr->len);
-    }
-    else if (encoding & ~ENC_STR_TIME_MASK) {
-        WSLUA_OPTARG_ERROR(TvbRange_nstime, ENCODING, "invalid encoding value");
     }
     else {
         gint endoff = 0;
@@ -1141,8 +1134,11 @@ WSLUA_METHOD TvbRange_bytes(lua_State* L) {
 
        On failure or error, nil is returned for both return values.
 
-       @note The encoding type of the hex string should also be set, for example
+       [NOTE]
+       ====
+       The encoding type of the hex string should also be set, for example
        `ENC_ASCII` or `ENC_UTF_8`, along with `ENC_STR_HEX`.
+       ====
      */
 #define WSLUA_OPTARG_TvbRange_bytes_ENCODING 2 /* An optional ENC_* encoding value to use */
     TvbRange tvbr = checkTvbRange(L,1);

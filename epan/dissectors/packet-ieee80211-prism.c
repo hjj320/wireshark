@@ -9,19 +9,7 @@
  *
  * Copied from README.developer
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  */
 
@@ -72,8 +60,7 @@ static int hf_ieee80211_prism_did_unknown = -1;
 static int hf_ieee80211_prism_did_sig_a1 = -1;
 static int hf_ieee80211_prism_did_sig_a2 = -1;
 static int hf_ieee80211_prism_did_sig_b = -1;
-static int hf_ieee80211_prism_did_sig_rate = -1;
-static int hf_ieee80211_prism_did_sig_rate_field= -1;
+static int hf_ieee80211_prism_did_sig_rate_field = -1;
 
 
 static gint ett_prism = -1;
@@ -855,15 +842,12 @@ dissect_prism(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
             case PRISM_TYPE1_RATE_SIG_B:
             case PRISM_TYPE2_RATE_SIG_B:
                 if (tree && rate_phy1 && rate_phy2) {
-                    proto_item *sig_item, *sig_sub_item;
-                    proto_tree *sig_tree;
+                    proto_item *sig_sub_item;
 
                     proto_tree_add_item(prism_did_tree, hf_ieee80211_prism_did_sig_b, tvb, offset, 4, byte_order);
                     proto_item_append_text(ti_did, " 0x%x", tvb_get_letohl(tvb, offset));
 
-                    sig_item = proto_tree_add_item(prism_tree, hf_ieee80211_prism_did_sig_rate, tvb, offset, 4, byte_order);
-                    sig_tree = proto_item_add_subtree(sig_item, ett_sig_ab);
-                    sig_sub_item = proto_tree_add_item(sig_tree, hf_ieee80211_prism_did_sig_rate_field, tvb, offset, 4, byte_order);
+                    sig_sub_item = proto_tree_add_item(prism_tree, hf_ieee80211_prism_did_sig_rate_field, tvb, offset, 4, byte_order);
                     proto_item_append_text(sig_sub_item, " %s", prism_rate_return_sig(rate_phy1, rate_phy2, &phdr));
                   }
                   break;
@@ -972,10 +956,6 @@ static hf_register_info hf_prism[] = {
     { &hf_ieee80211_prism_did_sig_b,
      {"SIG", "prism.did.sigb", FT_UINT32, BASE_HEX, NULL, 0x0,
      NULL, HFILL}},
-
-    { &hf_ieee80211_prism_did_sig_rate,
-     {"Rate (In Mb/s)", "prism.did.rate", FT_NONE, BASE_NONE, 0, 0x0,
-      NULL, HFILL }},
 
     { &hf_ieee80211_prism_did_sig_rate_field,
      {"SIG Field", "prism.did.sigab", FT_NONE, BASE_NONE, 0, 0x0,

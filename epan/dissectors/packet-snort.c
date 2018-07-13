@@ -12,19 +12,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 
@@ -50,6 +38,7 @@
 #include <epan/prefs.h>
 #include <epan/expert.h>
 #include <epan/wmem/wmem.h>
+#include <wsutil/file_util.h>
 #include <wiretap/wtap-int.h>
 
 #include "snort-config.h"
@@ -142,7 +131,6 @@ static gboolean snort_show_alert_expert_info = FALSE;
 
 /* Should we try to attach the alert to the tcp.reassembled_in frame instead of current one? */
 static gboolean snort_alert_in_reassembled_frame = FALSE;
-
 
 
 /********************************************************/
@@ -286,7 +274,6 @@ static gboolean content_compare_case_insensitive(const guint8* memory, const cha
     return TRUE;
 }
 
-
 /* Move through the bytes of the tvbuff, looking for a match against the
  * regexp from the given content.
  */
@@ -303,7 +290,8 @@ static gboolean look_for_pcre(content_t *content, tvbuff_t *tvb, guint start_off
         return FALSE;
     }
 
-    /* Copy remaining bytes into NULL-terminated string. */
+    /* Copy remaining bytes into NULL-terminated string. Unfortunately, this interface does't allow
+       us to find patterns that involve bytes with value 0.. */
     int length_remaining = tvb_captured_length_remaining(tvb, start_offset);
     gchar *string = (gchar*)g_malloc(length_remaining + 1);
     tvb_memcpy(tvb, (void*)string, start_offset, length_remaining);
@@ -747,8 +735,9 @@ static void snort_show_alert(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo
 
     /* Can only find start if we have the rule and know the protocol */
     guint content_start_match = 0;
+    guint payload_start = 0;
     if (rule) {
-        content_start_match = get_content_start_match(rule, tree);
+        payload_start = content_start_match = get_content_start_match(rule, tree);
     }
 
     /* Snort output arrived and was previously stored - so add to tree */
@@ -789,6 +778,8 @@ static void snort_show_alert(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo
              * correct place for every alert */
         }
     }
+
+    snort_debug_printf("Showing alert (sid=%u) in frame %u\n", alert->sid, pinfo->num);
 
     /* Show in expert info if configured to. */
     if (snort_show_alert_expert_info) {
@@ -933,15 +924,19 @@ static void snort_show_alert(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo
                a negated content entry (i.e. beginning with '!') */
             if (attempt_match && !rule->contents[n].negation) {
                 /* Look up offset of match. N.B. would only expect to see on first content... */
-                guint offset_to_add = 0;
+                guint distance_to_add = 0;
 
-                /* May need to add absolute offset into packet... */
+                /* May need to start looking from absolute offset into packet... */
                 if (rule->contents[n].offset_set) {
-                    offset_to_add = rule->contents[n].offset;
+                    content_start_match = payload_start + rule->contents[n].offset;
                 }
                 /* ... or a number of bytes beyond the previous content match */
                 else if (rule->contents[n].distance_set) {
-                    offset_to_add = (content_last_match_end-content_start_match) + rule->contents[n].distance;
+                    distance_to_add = (content_last_match_end-content_start_match) + rule->contents[n].distance;
+                }
+                else {
+                    /* No constraints about where it appears - go back to the start of the frame. */
+                    content_start_match = payload_start;
                 }
 
 
@@ -949,7 +944,7 @@ static void snort_show_alert(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo
                 /* TODO: could take 'depth' and 'within' into account to limit extent of search,
                    but OK if just trying to verify what Snort already found. */
                 match_found = get_content_match(alert, n,
-                                                tvb, content_start_match+offset_to_add,
+                                                tvb, content_start_match+distance_to_add,
                                                 &content_offset, &converted_content_length);
                 if (match_found) {
                     content_last_match_end = content_offset + converted_content_length;
@@ -964,6 +959,12 @@ static void snort_show_alert(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo
                                               rule->contents[n].str,
                                               content_text_template,
                                               rule->contents[n].str);
+
+            /* Next match position will be after this one */
+            if (match_found) {
+                content_start_match = content_last_match_end;
+            }
+
             if (!attempt_match) {
                 proto_item_append_text(ti, " (no match attempt made)");
             }
@@ -971,6 +972,9 @@ static void snort_show_alert(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo
             /* Show (only as text) attributes of content field */
             if (rule->contents[n].fastpattern) {
                 proto_item_append_text(ti, " (fast_pattern)");
+            }
+            if (rule->contents[n].rawbytes) {
+                proto_item_append_text(ti, " (rawbytes)");
             }
             if (rule->contents[n].nocase) {
                 proto_item_append_text(ti, " (nocase)");
@@ -1001,9 +1005,15 @@ static void snort_show_alert(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo
             if (rule->contents[n].http_cookie != 0) {
                 proto_item_append_text(ti, " (http_cookie)");
             }
+            if (rule->contents[n].http_user_agent != 0) {
+                proto_item_append_text(ti, " (http_user_agent)");
+            }
 
             if (attempt_match && !rule->contents[n].negation && !match_found) {
                 /* Useful for debugging, may also happen when Snort is reassembling.. */
+                /* TODO: not sure why, but PCREs might not be found first time through, but will be
+                 * found later, with the result that there will be 'not located' expert warnings,
+                 * but when you click on the packet, it is matched after all... */
                 proto_item_append_text(ti, " - not located");
                 expert_add_info_format(pinfo, ti, &ei_snort_content_not_matched,
                                        "%s   \"%s\"   not found in frame",
@@ -1136,7 +1146,7 @@ snort_dissector(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         if (!pinfo->fd->flags.visited && current_session.working) {
             int write_err = 0;
             gchar *err_info;
-            struct wtap_pkthdr wtp;
+            wtap_rec rec;
 
             /* First time, open current_session.in to write to for dumping into snort with */
             if (!current_session.pdh) {
@@ -1144,12 +1154,19 @@ snort_dissector(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
 
                 /* Older versions of Snort don't support capture file with several encapsulations (like pcapng),
                  * so write in pcap format and hope we have just one encap.
-                 * Newer versions of Snort can read pcapng now, but still write in pcap format.
+                 * Newer versions of Snort can read pcapng now, but still
+                 * write in pcap format; if "newer versions of Snort" really
+                 * means "Snort, when using newer versions of libpcap", then,
+                 * yes, they can read pcapng, but they can't read pcapng
+                 * files with more than one encapsulation type, as libpcap's
+                 * API currently can't handle that, so even those "newer
+                 * versions of Snort" wouldn't handle multiple encapsulation
+                 * types.
                  */
                 current_session.pdh = wtap_dump_fdopen(current_session.in,
                                                        WTAP_FILE_TYPE_SUBTYPE_PCAP,
-                                                       pinfo->pkt_encap,
-                                                       WTAP_MAX_PACKET_SIZE,
+                                                       pinfo->rec->rec_header.packet_header.pkt_encap,
+                                                       WTAP_MAX_PACKET_SIZE_STANDARD,
                                                        FALSE,                 /* compressed */
                                                        &open_err);
                 if (!current_session.pdh) {
@@ -1159,25 +1176,24 @@ snort_dissector(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
             }
 
             /* Start with all same values... */
-            memcpy(&wtp, pinfo->phdr, sizeof(wtp));
+            rec = *pinfo->rec;
 
             /* Copying packet details into wtp for writing */
-            wtp.ts = pinfo->fd->abs_ts;
+            rec.ts = pinfo->fd->abs_ts;
 
-            /* NB: overwriting wtp.ts.nsecs so we can see packet number back if an alert is written for this frame!!!! */
+            /* NB: overwriting the time stamp so we can see packet number back if an alert is written for this frame!!!! */
             /* TODO: does this seriously affect snort's ability to reason about time?
              * At least all packets will still be in order... */
-            wtp.ts.nsecs = pinfo->fd->num * 1000;    /* XXX, max 999'999 frames */
+            rec.ts.nsecs = pinfo->fd->num * 1000;    /* XXX, max 999'999 frames */
 
-            wtp.caplen = tvb_captured_length(tvb);
-            wtp.len = tvb_reported_length(tvb);
-            wtp.pkt_encap = pinfo->pkt_encap;
-            if (current_session.pdh->encap != wtp.pkt_encap) {
+            rec.rec_header.packet_header.caplen = tvb_captured_length(tvb);
+            rec.rec_header.packet_header.len = tvb_reported_length(tvb);
+            if (current_session.pdh->encap != rec.rec_header.packet_header.pkt_encap) {
                 /* XXX, warning! convert? */
             }
 
             /* Dump frame into snort's stdin */
-            if (!wtap_dump(current_session.pdh, &wtp, tvb_get_ptr(tvb, 0, tvb_reported_length(tvb)), &write_err, &err_info)) {
+            if (!wtap_dump(current_session.pdh, &rec, tvb_get_ptr(tvb, 0, tvb_reported_length(tvb)), &write_err, &err_info)) {
                 current_session.working = FALSE;
                 return 0;
             }
@@ -1225,6 +1241,17 @@ static void snort_start(void)
         NULL
     };
 
+    /* Enable field priming if required. */
+    if (snort_alert_in_reassembled_frame) {
+        /* Add items we want to try to get to find before we get called.
+           For now, just ask for tcp.reassembled_in, which won't be seen
+           on the first pass through the packets. */
+        GArray *wanted_hfids = g_array_new(FALSE, FALSE, (guint)sizeof(int));
+        int id = proto_registrar_get_id_byname("tcp.reassembled_in");
+        g_array_append_val(wanted_hfids, id);
+        set_postdissector_wanted_hfids(snort_handle, wanted_hfids);
+    }
+
     /* Nothing to do if not enabled, but registered init function gets called anyway */
     if ((pref_snort_alerts_source == FromNowhere) ||
         !proto_is_protocol_enabled(find_protocol_by_id(proto_snort))) {
@@ -1248,7 +1275,7 @@ static void snort_start(void)
     if (current_session.running) {
         return;
     }
-    current_session.running = TRUE;
+    current_session.running = FALSE;
 
     /* Reset global stats */
     reset_global_rule_stats(g_snort_config);
@@ -1256,12 +1283,32 @@ static void snort_start(void)
     /* Need to test that we can run snort --version and that config can be parsed... */
     /* Does nothing at present */
     if (!snort_config_ok) {
-        current_session.running = FALSE;
         /* Can carry on without snort... */
         return;
     }
 
+    /* About to run snort, so check that configured files exist, and that binary could be executed. */
+    ws_statb64 binary_stat, config_stat;
+
+    if (ws_stat64(pref_snort_binary_filename, &binary_stat) != 0) {
+        snort_debug_printf("Can't run snort - executable '%s' not found\n", pref_snort_binary_filename);
+        return;
+    }
+
+    if (ws_stat64(pref_snort_config_filename, &config_stat) != 0) {
+        snort_debug_printf("Can't run snort - config file '%s' not found\n", pref_snort_config_filename);
+        return;
+    }
+
+#ifdef S_IXUSR
+    if (!(binary_stat.st_mode & S_IXUSR)) {
+        snort_debug_printf("Snort binary '%s' is not executable\n", pref_snort_binary_filename);
+        return;
+    }
+#endif
+
     /* Create snort process and set up pipes */
+    snort_debug_printf("\nRunning %s with config file %s\n", pref_snort_binary_filename, pref_snort_config_filename);
     if (!g_spawn_async_with_pipes(NULL,          /* working_directory */
                                   (char **)argv,
                                   NULL,          /* envp */
@@ -1277,6 +1324,10 @@ static void snort_start(void)
         current_session.running = FALSE;
         current_session.working = FALSE;
         return;
+    }
+    else {
+        current_session.running = TRUE;
+        current_session.working = TRUE;
     }
 
     /* Setup handler for when process goes away */
@@ -1335,6 +1386,9 @@ static void snort_file_cleanup(void)
     if (g_snort_config) {
         delete_config(&g_snort_config);
     }
+
+    /* Disable field priming that got enabled in the init routine. */
+    set_postdissector_wanted_hfids(snort_handle, NULL);
 }
 
 void
@@ -1344,14 +1398,6 @@ proto_reg_handoff_snort(void)
      * work as a non-root user (couldn't read stdin)
      * TODO: could run snort just to get the version number and check the config file is readable?
      * TODO: could make snort config parsing less forgiving and use that as a test? */
-
-    /* Add items we want to try to get to find before we get called.
-       For now, just ask for tcp.reassembled_in, which won't be seen
-       on the first pass through the packets. */
-    GArray *wanted_hfids = g_array_new(FALSE, FALSE, (guint)sizeof(int));
-    int id = proto_registrar_get_id_byname("tcp.reassembled_in");
-    g_array_append_val(wanted_hfids, id);
-    set_postdissector_wanted_hfids(snort_handle, wanted_hfids);
 }
 
 void
@@ -1505,7 +1551,6 @@ proto_register_snort(void)
                                    "Try to show alerts in reassembled frame",
                                    "Attempt to show alert in reassembled frame where possible",
                                    &snort_alert_in_reassembled_frame);
-
 
     snort_handle = create_dissector_handle(snort_dissector, proto_snort);
 

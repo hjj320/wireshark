@@ -6,19 +6,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -110,13 +98,13 @@ get_profile_parent (const gchar *profilename)
     return profilename;
 }
 
-const gchar *apply_profile_changes(void)
+gchar *apply_profile_changes(void)
 {
     char        *pf_dir_path, *pf_dir_path2, *pf_filename;
     GList       *fl1, *fl2;
     profile_def *profile1, *profile2;
     gboolean     found;
-    const gchar *err_msg;
+    gchar       *err_msg;
 
     /* First validate all profile names */
     fl1 = edited_profile_list();
@@ -125,7 +113,7 @@ const gchar *apply_profile_changes(void)
         g_strstrip(profile1->name);
         if ((err_msg = profile_name_is_valid(profile1->name)) != NULL) {
             gchar *message = g_strdup_printf("%s\nProfiles unchanged.", err_msg);
-            g_free((gchar *)err_msg);
+            g_free(err_msg);
             return message;
         }
         fl1 = g_list_next(fl1);
@@ -202,8 +190,6 @@ const gchar *apply_profile_changes(void)
                     g_free(pf_dir_path2);
                 }
                 profile1->status = PROF_STAT_EXISTS;
-                g_free (profile1->reference);
-                profile1->reference = g_strdup(profile1->name);
             }
         }
         fl1 = g_list_next(fl1);
@@ -222,7 +208,9 @@ const gchar *apply_profile_changes(void)
                     /* Profile exists in both lists */
                     found = TRUE;
                 } else if (strcmp(profile1->name, profile2->reference)==0) {
-                    /* Profile has been renamed */
+                    /* Profile has been renamed, update reference to the new name */
+                    g_free (profile2->reference);
+                    profile2->reference = g_strdup(profile2->name);
                     found = TRUE;
                 }
             }
@@ -313,6 +301,9 @@ init_profile_list(void)
     WS_DIR        *dir;             /* scanned directory */
     WS_DIRENT     *file;            /* current file */
     const gchar   *name;
+    GList         *local_profiles = NULL;
+    GList         *global_profiles = NULL;
+    GList         *iter;
     gchar         *profiles_dir, *filename;
 
     empty_profile_list(TRUE);
@@ -328,13 +319,20 @@ init_profile_list(void)
             filename = g_strdup_printf ("%s%s%s", profiles_dir, G_DIR_SEPARATOR_S, name);
 
             if (test_for_directory(filename) == EISDIR) {
-                /*fl_entry =*/ add_to_profile_list(name, name, PROF_STAT_EXISTS, FALSE, FALSE);
+                local_profiles = g_list_prepend(local_profiles, g_strdup(name));
             }
             g_free (filename);
         }
         ws_dir_close (dir);
     }
     g_free(profiles_dir);
+
+    local_profiles = g_list_sort(local_profiles, (GCompareFunc)g_ascii_strcasecmp);
+    for (iter = g_list_first(local_profiles); iter; iter = g_list_next(iter)) {
+        name = (gchar *)iter->data;
+        add_to_profile_list(name, name, PROF_STAT_EXISTS, FALSE, FALSE);
+    }
+    g_list_free_full(local_profiles, g_free);
 
     /* Global profiles */
     profiles_dir = get_global_profiles_dir();
@@ -344,14 +342,20 @@ init_profile_list(void)
             filename = g_strdup_printf ("%s%s%s", profiles_dir, G_DIR_SEPARATOR_S, name);
 
             if (test_for_directory(filename) == EISDIR) {
-                /*fl_entry =*/ add_to_profile_list(name, name, PROF_STAT_EXISTS, TRUE, TRUE);
-                /*profile = (profile_def *) fl_entry->data;*/
+                global_profiles = g_list_prepend(global_profiles, g_strdup(name));
             }
             g_free (filename);
         }
         ws_dir_close (dir);
     }
     g_free(profiles_dir);
+
+    global_profiles = g_list_sort(global_profiles, (GCompareFunc)g_ascii_strcasecmp);
+    for (iter = g_list_first(global_profiles); iter; iter = g_list_next(iter)) {
+        name = (gchar *)iter->data;
+        add_to_profile_list(name, name, PROF_STAT_EXISTS, TRUE, TRUE);
+    }
+    g_list_free_full(global_profiles, g_free);
 
     /* Make the current list and the edited list equal */
     copy_profile_list ();
